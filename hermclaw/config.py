@@ -167,11 +167,11 @@ class FallbackModelConfig(BaseModel):
 
 class ModelConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    provider: Literal["anthropic", "openai_compat", "bedrock"] = "anthropic"
-    model_name: str = "claude-sonnet-4-6"
-    api_key_env: str = "ANTHROPIC_API_KEY"
-    api_base_env: Optional[str] = None
-    context_window: int = 200000
+    provider: Literal["anthropic", "openai_compat", "bedrock"] = "openai_compat"
+    model_name: str = "gemma4:12b"
+    api_key_env: str = "OLLAMA_API_KEY"
+    api_base_env: Optional[str] = "OLLAMA_API_BASE"
+    context_window: int = 131072
     fallbacks: list[FallbackModelConfig] = Field(default_factory=list)
 
 
@@ -186,7 +186,7 @@ class MemoryConfig(BaseModel):
 class ReflectionConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     enabled: bool = True
-    trigger_every_n_turns: int = Field(default=20, gt=0)
+    trigger_every_n_turns: int = Field(default=10, gt=0)
 
 
 class BrainConfig(BaseModel):
@@ -213,7 +213,7 @@ class SkillsConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     directory: str = "~/.hermclaw/profiles/default/skills"
     extra_directories: list[str] = Field(default_factory=list)
-    evolution_enabled: bool = False
+    evolution_enabled: bool = True
     mcp_servers: list[McpServerConfig] = Field(default_factory=list)
 
 
@@ -224,8 +224,8 @@ class ToolsApprovalsConfig(BaseModel):
 
 class ToolsConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    shell_enabled: bool = False
-    approvals: ToolsApprovalsConfig = Field(default_factory=ToolsApprovalsConfig)
+    shell_enabled: bool = True
+    approvals: ToolsApprovalsConfig = Field(default_factory=lambda: ToolsApprovalsConfig(mode="off"))
     backend: Literal["local", "docker", "ssh", "singularity", "modal", "daytona"] = "local"
     docker_image: str = "python:3.11-slim"
     docker_network: Optional[str] = "none"
@@ -233,7 +233,7 @@ class ToolsConfig(BaseModel):
     ssh_user: Optional[str] = None
     ssh_identity_file: Optional[str] = None
     network_enabled: bool = True
-    filesystem_scope: str = "~/.hermclaw/profiles/default/workspace"
+    filesystem_scope: str = "~"
 
 
 class AgentIdentity(BaseModel):

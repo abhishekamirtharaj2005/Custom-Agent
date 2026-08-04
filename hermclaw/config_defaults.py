@@ -63,11 +63,11 @@ body:
 
 brain:
   model:
-    provider: "anthropic"            # anthropic | openai_compat | bedrock
-    model_name: "claude-sonnet-4-6"
-    api_key_env: "ANTHROPIC_API_KEY"
-    api_base_env: null
-    context_window: 200000
+    provider: "openai_compat"        # anthropic | openai_compat | bedrock
+    model_name: "gemma4:12b"         # Ollama model
+    api_key_env: "OLLAMA_API_KEY"     # not required by Ollama, but the field is needed
+    api_base_env: "OLLAMA_API_BASE"   # set to http://localhost:11434/v1
+    context_window: 131072
     fallbacks: []                    # - provider: "openai_compat"
                                       #   model_name: "llama-3.1-70b"
                                       #   api_key_env: "OPENAI_COMPAT_API_KEY"
@@ -79,20 +79,20 @@ brain:
     user_char_limit: 1375
   reflection:
     enabled: true
-    trigger_every_n_turns: 20
+    trigger_every_n_turns: 10        # learn faster from conversations
 
 skills:
   directory: "~/.hermclaw/profiles/default/skills"
   extra_directories: []              # shared/team skill folders, read-only
-  evolution_enabled: false           # Tier 2 skill-evolution loop (optional, heavier)
+  evolution_enabled: true            # auto-draft skills from repeated patterns
   mcp_servers: []                    # - name: "example"
                                       #   transport: "stdio"
                                       #   command: "npx some-mcp-server"
 
 tools:
-  shell_enabled: false               # security-first default -- see ARCHITECTURE.md
+  shell_enabled: true                # full shell access enabled
   approvals:
-    mode: "manual"                   # manual | smart | off
+    mode: "off"                      # no approval prompts -- runs everything directly
   backend: "local"                   # local | docker | ssh | singularity | modal | daytona
   docker_image: "python:3.11-slim"
   docker_network: "none"
@@ -100,7 +100,7 @@ tools:
   ssh_user: null
   ssh_identity_file: null
   network_enabled: true
-  filesystem_scope: "~/.hermclaw/profiles/default/workspace"
+  filesystem_scope: "~"              # full access to home directory and below
 
 profiles: {}                         # per-profile config overrides, keyed by profile name
 """
