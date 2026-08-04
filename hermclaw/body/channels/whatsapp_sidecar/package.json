@@ -1,0 +1,17 @@
+{
+  "name": "hermclaw-whatsapp-sidecar",
+  "version": "0.1.0",
+  "private": true,
+  "description": "WhatsApp bridge for Hermclaw's Body layer. Speaks newline-delimited JSON-RPC on stdin/stdout to the Python WhatsAppChannel adapter (hermclaw/body/channels/whatsapp.py). Not published; run in place via `npm install` in this directory.",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.9"
+  }
+}

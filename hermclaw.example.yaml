@@ -1,0 +1,93 @@
+# Hermclaw configuration
+# Full reference: docs/CONFIG_REFERENCE.md
+# Every *_env field names an ENVIRONMENT VARIABLE to read a secret from --
+# never put a literal token/key/password anywhere in this file.
+
+agent:
+  name: "hermclaw"
+  default_profile: "default"
+  list: []                          # multi-identity entries (optional), e.g.:
+                                     # - id: support
+                                     #   identity: { name: "Helpdesk", emoji: "🎫" }
+                                     #   profile: support_profile
+
+body:
+  gateway:
+    bind: "loopback"                # loopback | all
+    host: "127.0.0.1"
+    port: 18789
+    auth:
+      mode: "token"
+      token_env: "HERMCLAW_GATEWAY_TOKEN"
+
+  channels:
+    telegram:
+      enabled: false
+      bot_token_env: "TELEGRAM_BOT_TOKEN"
+      mode: "polling"                # polling | webhook
+    discord:
+      enabled: false
+      bot_token_env: "DISCORD_BOT_TOKEN"
+    slack:
+      enabled: false
+      bot_token_env: "SLACK_BOT_TOKEN"
+      app_token_env: "SLACK_APP_TOKEN"
+      socket_mode: true
+    cli:
+      enabled: true
+    web:
+      enabled: false
+    whatsapp:
+      enabled: false                 # backed by the Node/Baileys sidecar
+
+  scheduler:
+    heartbeat:
+      enabled: true
+      every: "30m"
+      show_ok: false
+      show_alerts: true
+    jobs: []                         # - cron: "0 9 * * *"
+                                      #   prompt: "Summarize overnight activity"
+
+brain:
+  model:
+    provider: "anthropic"            # anthropic | openai_compat | bedrock
+    model_name: "claude-sonnet-4-6"
+    api_key_env: "ANTHROPIC_API_KEY"
+    api_base_env: null
+    context_window: 200000
+    fallbacks: []                    # - provider: "openai_compat"
+                                      #   model_name: "llama-3.1-70b"
+                                      #   api_key_env: "OPENAI_COMPAT_API_KEY"
+                                      #   api_base_env: "OPENAI_COMPAT_API_BASE"
+  memory:
+    compression_threshold: 0.5       # fraction of context window that triggers compression
+    keep_recent_exchanges: 2
+    memory_char_limit: 2200
+    user_char_limit: 1375
+  reflection:
+    enabled: true
+    trigger_every_n_turns: 20
+
+skills:
+  directory: "~/.hermclaw/profiles/default/skills"
+  extra_directories: []              # shared/team skill folders, read-only
+  evolution_enabled: false           # Tier 2 skill-evolution loop (optional, heavier)
+  mcp_servers: []                    # - name: "example"
+                                      #   transport: "stdio"
+                                      #   command: "npx some-mcp-server"
+
+tools:
+  shell_enabled: false               # security-first default -- see ARCHITECTURE.md
+  approvals:
+    mode: "manual"                   # manual | smart | off
+  backend: "local"                   # local | docker | ssh | singularity | modal | daytona
+  docker_image: "python:3.11-slim"
+  docker_network: "none"
+  ssh_host: null
+  ssh_user: null
+  ssh_identity_file: null
+  network_enabled: true
+  filesystem_scope: "~/.hermclaw/profiles/default/workspace"
+
+profiles: {}                         # per-profile config overrides, keyed by profile name

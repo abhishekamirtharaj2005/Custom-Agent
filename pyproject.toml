@@ -1,0 +1,77 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hermclaw"
+version = "0.1.0"
+description = "A unified, self-improving personal AI agent -- merges OpenClaw's local-first gateway/channel/scheduler Body with Hermes Agent's reasoning/memory/reflection Brain into one coherent, one-command-installable Python package."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Hermclaw contributors" }]
+keywords = ["agent", "ai", "assistant", "llm", "personal-agent"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Communications :: Chat",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+# Core dependencies: enough for `hermclaw doctor --init && hermclaw chat`
+# to work against the default provider (Anthropic) with zero extras.
+dependencies = [
+    "pydantic>=2.0,<3",
+    "ruamel.yaml>=0.18",
+    "PyYAML>=6.0",
+    "typer>=0.12",
+    "rich>=13.0",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "apscheduler>=3.10,<4",
+    "structlog>=24.0",
+    "httpx>=0.27",
+    "anthropic>=0.30",
+    "mcp>=1.0",
+]
+
+[project.optional-dependencies]
+telegram = ["python-telegram-bot>=21.0"]
+discord = ["discord.py>=2.3"]
+slack = ["slack_sdk>=3.27", "slack_bolt>=1.18"]
+bedrock = ["boto3>=1.34"]
+channels = ["hermclaw[telegram,discord,slack]"]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "hermclaw[channels,bedrock]",
+]
+
+[project.urls]
+Homepage = "https://github.com/hermclaw/hermclaw"
+Documentation = "https://github.com/hermclaw/hermclaw/blob/main/README.md"
+
+[project.scripts]
+hermclaw = "hermclaw.cli:main_entrypoint"
+
+[tool.hatch.build.targets.wheel]
+packages = ["hermclaw"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"hermclaw/body/channels/whatsapp_sidecar/package.json" = "hermclaw/body/channels/whatsapp_sidecar/package.json"
+"hermclaw/body/channels/whatsapp_sidecar/index.js" = "hermclaw/body/channels/whatsapp_sidecar/index.js"
+"hermclaw/brain/memory/schema.sql" = "hermclaw/brain/memory/schema.sql"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-ra"
+markers = [
+    "live: hits a real network service; excluded from the default run",
+]
