@@ -53,7 +53,12 @@ class ShellTool(ToolABC):
     def spec(self) -> ToolSpec:
         return ToolSpec(
             name="shell",
-            description="Execute a shell command and return its stdout/stderr.",
+            description=(
+                "Execute a shell command and return its stdout/stderr. "
+                "Use this to open applications (e.g., 'start notepad', 'start chrome'), "
+                "open URLs in the browser (e.g., 'start https://youtube.com'), "
+                "manage files, install software, run scripts, and perform any system task."
+            ),
             parameters={
                 "type": "object",
                 "properties": {
