@@ -183,15 +183,18 @@ PROVIDERS = {
         "needs_key": False,
         "default_model": "gemma4:12b",
         "models": ["gemma4:12b", "gemma4:27b", "llama3.3:70b", "qwen3:14b", "deepseek-r1:14b", "mistral:7b"],
+        "api_base_value": "http://localhost:11434/v1",
+        "api_key_value": "ollama",  # Ollama ignores this but env var must exist
     },
     "OpenAI": {
         "provider": "openai_compat",
         "api_key_env": "OPENAI_API_KEY",
-        "api_base_env": None,
+        "api_base_env": "OPENAI_API_BASE",
         "context_window": 128000,
         "needs_key": True,
         "default_model": "gpt-4o",
         "models": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"],
+        "api_base_value": "https://api.openai.com/v1",
     },
     "Anthropic (Claude)": {
         "provider": "anthropic",
@@ -387,6 +390,15 @@ def setup_wizard() -> dict:
 
     # ── API key ──────────────────────────────────────────────────────────
     env_vars = {}
+
+    # Always set api_base if the provider defines a default value
+    if provider_cfg.get("api_base_value") and provider_cfg.get("api_base_env"):
+        env_vars[provider_cfg["api_base_env"]] = provider_cfg["api_base_value"]
+
+    # For providers that don't need a key (Ollama), write a placeholder
+    if provider_cfg.get("api_key_value"):
+        env_vars[provider_cfg["api_key_env"]] = provider_cfg["api_key_value"]
+
     if provider_cfg["needs_key"]:
         key_env, key_val = ask_secret(
             f"Enter your API key for {chosen_provider}:",
@@ -395,9 +407,7 @@ def setup_wizard() -> dict:
         if key_val:
             env_vars[key_env] = key_val
 
-    if provider_cfg.get("api_base_value"):
-        env_vars[provider_cfg["api_base_env"]] = provider_cfg["api_base_value"]
-    elif provider_cfg.get("api_base_env") and "Custom" in chosen_provider:
+    if provider_cfg.get("api_base_env") and "Custom" in chosen_provider:
         base_url = ask("Enter the API base URL:", default="http://localhost:11434/v1")
         if base_url:
             env_vars[provider_cfg["api_base_env"]] = base_url

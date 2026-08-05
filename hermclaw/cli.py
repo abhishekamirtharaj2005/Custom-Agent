@@ -77,8 +77,29 @@ def main(
     profile: str = typer.Option("default", "--profile", help="Profile to operate on"),
     json_output: bool = typer.Option(False, "--json", help="Machine-readable JSON output for every subcommand"),
 ) -> None:
+    # Load .env from hermclaw home BEFORE anything else resolves env vars
+    _load_env_file(hermclaw_home() / ".env")
     ctx.obj = {"config_path": config or default_config_path(), "profile": profile, "json": json_output}
     configure_logging(console=not json_output)
+
+
+def _load_env_file(env_path: Path) -> None:
+    """Load key=value pairs from a .env file into os.environ.
+    Doesn't overwrite existing env vars. No external dependency needed."""
+    if not env_path.exists():
+        return
+    try:
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key and key not in os.environ:  # never overwrite existing
+                os.environ[key] = value
+    except Exception:
+        pass  # .env loading is best-effort
 
 
 def _load_or_die(config_path: Path):
