@@ -102,12 +102,30 @@ def chat(ctx: typer.Context) -> None:
 
 
 async def _chat_impl(config_path: Path, profile: str) -> None:
+    from hermclaw.brain.model_catalog import CostTracker, ModelCatalog
+    from hermclaw.brain.post_processing import sanitize_response
+    from hermclaw.brain.transports.openai_compat import ChatCompletionsTransport
+
     result = _load_or_die(config_path)
     runtime = await build_agent_runtime(profile, result.config)
-    console.print(f"[bold]Hermclaw[/bold] -- profile: [cyan]{profile}[/cyan], model: {result.config.brain.model.model_name}")
-    console.print("Type a message and press Enter. Ctrl-D or Ctrl-C to exit.\n")
 
-    session_id = await runtime.memory_store.a_create_session(channel="cli", model=result.config.brain.model.model_name)
+    catalog = ModelCatalog()
+    cost_tracker = CostTracker()
+
+    model_name = result.config.brain.model.model_name
+    console.print(f"[bold]Hermclaw[/bold] -- profile: [cyan]{profile}[/cyan], model: {model_name}")
+    console.print("Type a message and press Enter. Ctrl-D or Ctrl-C to exit.")
+    console.print("[dim]Commands: /model <name>, /models, /cost, /exit[/dim]\n")
+
+    session_id = await runtime.memory_store.a_create_session(channel="cli", model=model_name)
+
+    # Wire up streaming callback
+    streaming_enabled = True
+    if isinstance(runtime.agent.transport, ChatCompletionsTransport):
+        def _on_chunk(chunk: str) -> None:
+            console.print(chunk, end="", highlight=False)
+        runtime.agent.transport.on_stream_chunk = _on_chunk
+
     try:
         loop = asyncio.get_running_loop()
         while True:
@@ -117,9 +135,123 @@ async def _chat_impl(config_path: Path, profile: str) -> None:
                 break
             if not user_input.strip():
                 continue
-            with console.status("[dim]thinking...[/dim]"):
-                turn_result = await runtime.agent.run_turn(session_id, user_input)
-            console.print(f"[bold cyan]hermclaw>[/bold cyan] {turn_result.text}\n")
+
+            # --- Slash commands ---
+            stripped = user_input.strip()
+            if stripped.lower() in ("/exit", "/quit", "/q"):
+                break
+
+            if stripped.lower() == "/models":
+                console.print(catalog.format_table())
+                continue
+
+            if stripped.lower() == "/cost":
+                console.print(f"[dim]{cost_tracker.summary()}[/dim]")
+                continue
+
+            if stripped.lower().startswith("/model "):
+                new_model = stripped[7:].strip()
+                info = catalog.resolve(new_model)
+                if info:
+                    console.print(f"[green]Switched to {info.name}[/green] ({info.description})")
+                    # Re-build transport for the new model
+                    from hermclaw.brain.transports import build_transport
+                    from hermclaw.config import ModelConfig
+                    new_cfg = ModelConfig(
+                        provider=info.provider,
+                        model_name=info.name,
+                        api_base_env=f"HERMCLAW_API_BASE_{info.provider.upper()}" if info.api_base else result.config.brain.model.api_base_env,
+                        api_key_env=result.config.brain.model.api_key_env,
+                    )
+                    # For Ollama models with known api_base, set the env
+                    if info.api_base:
+                        os.environ[f"HERMCLAW_API_BASE_{info.provider.upper()}"] = info.api_base
+                        new_cfg.api_base_env = f"HERMCLAW_API_BASE_{info.provider.upper()}"
+                    try:
+                        runtime.agent.transport = build_transport(new_cfg)
+                        runtime.agent.model_config = new_cfg
+                        if isinstance(runtime.agent.transport, ChatCompletionsTransport):
+                            runtime.agent.transport.on_stream_chunk = _on_chunk
+                    except Exception as exc:
+                        console.print(f"[red]Failed to switch: {exc}[/red]")
+                else:
+                    console.print(f"[red]Unknown model: {new_model}[/red]. Use /models to see available.")
+                continue
+
+            # --- Regular message ---
+            if streaming_enabled and isinstance(runtime.agent.transport, ChatCompletionsTransport):
+                # Track what the streaming callback actually printed
+                streamed_chars = 0
+                _original_on_chunk = runtime.agent.transport.on_stream_chunk
+                def _tracking_on_chunk(chunk: str) -> None:
+                    nonlocal streamed_chars
+                    streamed_chars += len(chunk)
+                    console.print(chunk, end="", highlight=False)
+                runtime.agent.transport.on_stream_chunk = _tracking_on_chunk
+
+                console.print("[bold cyan]hermclaw>[/bold cyan] ", end="")
+                turn_result = await runtime.agent.run_turn(session_id, user_input, stream=True)
+
+                # After tool calls, the final response is NOT streamed --
+                # it only lives in turn_result.text. Print it if streaming
+                # didn't already output it.
+                if turn_result.text and streamed_chars == 0:
+                    clean_text = sanitize_response(turn_result.text)
+                    console.print(clean_text)
+                elif streamed_chars > 0:
+                    console.print("")  # newline after streamed text
+                else:
+                    # Model returned empty text (shouldn't happen, but be safe)
+                    console.print("[dim](no response)[/dim]")
+                console.print("")  # blank line separator
+            else:
+                with console.status("[dim]thinking...[/dim]"):
+                    turn_result = await runtime.agent.run_turn(session_id, user_input)
+                clean_text = sanitize_response(turn_result.text)
+                console.print(f"[bold cyan]hermclaw>[/bold cyan] {clean_text}\n")
+
+            # Track costs
+            cost_tracker.record(
+                model_name=runtime.agent.model_config.model_name,
+                input_tokens=turn_result.usage.input_tokens,
+                output_tokens=turn_result.usage.output_tokens,
+                catalog=catalog,
+            )
+    finally:
+        console.print(f"\n[dim]{cost_tracker.summary()}[/dim]")
+        await runtime.aclose()
+
+
+# =============================================================================
+# run (one-shot mode)
+# =============================================================================
+
+
+@app.command()
+def run(
+    ctx: typer.Context,
+    prompt: str = typer.Argument(..., help="The prompt to send to the agent"),
+) -> None:
+    """One-shot mode: send a single prompt, get a response, and exit.
+    Perfect for scripting and automation."""
+    _run(_run_impl(ctx.obj["config_path"], ctx.obj["profile"], prompt))
+
+
+async def _run_impl(config_path: Path, profile: str, prompt: str) -> None:
+    from hermclaw.brain.post_processing import sanitize_response
+
+    result = _load_or_die(config_path)
+    runtime = await build_agent_runtime(profile, result.config)
+
+    session_id = await runtime.memory_store.a_create_session(
+        channel="cli-oneshot", model=result.config.brain.model.model_name
+    )
+    try:
+        turn_result = await runtime.agent.run_turn(session_id, prompt)
+        clean_text = sanitize_response(turn_result.text)
+        # In one-shot mode, print just the response text (no formatting)
+        # so it can be piped to other commands
+        print(clean_text)
     finally:
         await runtime.aclose()
 
@@ -467,9 +599,235 @@ async def _skills_show_impl(config_path: Path, profile: str, name: str, json_out
     console.print(skill.body)
 
 
+# =============================================================================
+# sessions
+# =============================================================================
+
+sessions_app = typer.Typer(help="Session management: list, show, export, and delete sessions.")
+app.add_typer(sessions_app, name="sessions")
+
+
+@sessions_app.command("list")
+def sessions_list(ctx: typer.Context, limit: int = typer.Option(20, help="Max sessions to show")) -> None:
+    """List recent chat sessions."""
+    _run(_sessions_list_impl(ctx.obj["config_path"], ctx.obj["profile"], limit))
+
+
+async def _sessions_list_impl(config_path: Path, profile: str, limit: int) -> None:
+    result = _load_or_die(config_path)
+    runtime = await build_agent_runtime(profile, result.config)
+    try:
+        sessions = await runtime.memory_store.a_get_recent_sessions(n=limit)
+        if not sessions:
+            console.print("No sessions found.")
+            return
+        table = Table(title=f"Sessions for profile '{profile}'")
+        table.add_column("ID", style="cyan")
+        table.add_column("Title")
+        table.add_column("Channel")
+        table.add_column("Started")
+        table.add_column("Tokens", justify="right")
+        for s in sessions:
+            table.add_row(
+                s.id[:8],
+                s.title or "(untitled)",
+                getattr(s, "channel", "cli"),
+                str(s.started_at)[:19] if s.started_at else "—",
+                str(getattr(s, "total_tokens", "—")),
+            )
+        console.print(table)
+    finally:
+        await runtime.aclose()
+
+
+@sessions_app.command("show")
+def sessions_show(
+    ctx: typer.Context,
+    session_id: str = typer.Argument(..., help="Session ID (or prefix)"),
+) -> None:
+    """Show messages from a specific session."""
+    _run(_sessions_show_impl(ctx.obj["config_path"], ctx.obj["profile"], session_id))
+
+
+async def _sessions_show_impl(config_path: Path, profile: str, session_id: str) -> None:
+    result = _load_or_die(config_path)
+    runtime = await build_agent_runtime(profile, result.config)
+    try:
+        # Try to find session by prefix
+        sessions = await runtime.memory_store.a_get_recent_sessions(n=100)
+        matches = [s for s in sessions if s.id.startswith(session_id)]
+        if not matches:
+            raise CleanExit(f"No session matching '{session_id}'.")
+        sid = matches[0].id
+
+        messages = await runtime.memory_store.a_get_session_messages(sid, include_compressed_away=True)
+        console.print(f"\n[bold]Session {sid[:8]}[/bold] ({len(messages)} messages)\n")
+        for m in messages:
+            if m.role == "user":
+                console.print(f"[bold green]you>[/bold green] {m.content[:500]}")
+            elif m.role == "assistant":
+                console.print(f"[bold cyan]hermclaw>[/bold cyan] {m.content[:500]}")
+            elif m.role == "tool":
+                console.print(f"[dim]  (tool result: {m.content[:200]})[/dim]")
+            console.print()
+    finally:
+        await runtime.aclose()
+
+
+@sessions_app.command("export")
+def sessions_export(
+    ctx: typer.Context,
+    session_id: str = typer.Argument(..., help="Session ID (or prefix)"),
+    output: Path = typer.Option("session_export.json", help="Output file"),
+) -> None:
+    """Export a session to JSON."""
+    _run(_sessions_export_impl(ctx.obj["config_path"], ctx.obj["profile"], session_id, output))
+
+
+async def _sessions_export_impl(config_path: Path, profile: str, session_id: str, output: Path) -> None:
+    import json as json_mod
+
+    result = _load_or_die(config_path)
+    runtime = await build_agent_runtime(profile, result.config)
+    try:
+        sessions = await runtime.memory_store.a_get_recent_sessions(n=100)
+        matches = [s for s in sessions if s.id.startswith(session_id)]
+        if not matches:
+            raise CleanExit(f"No session matching '{session_id}'.")
+        sid = matches[0].id
+
+        messages = await runtime.memory_store.a_get_session_messages(sid, include_compressed_away=True)
+        export = {
+            "session_id": sid,
+            "messages": [
+                {"role": m.role, "content": m.content, "tool_calls": m.tool_calls}
+                for m in messages
+            ],
+        }
+        output.write_text(json_mod.dumps(export, indent=2), encoding="utf-8")
+        console.print(f"Exported {len(messages)} messages to {output}")
+    finally:
+        await runtime.aclose()
+
+
+# =============================================================================
+# plugins
+# =============================================================================
+
+plugins_app = typer.Typer(help="Plugin management: list, install, uninstall, create plugins.")
+app.add_typer(plugins_app, name="plugins")
+
+
+@plugins_app.command("list")
+def plugins_list(ctx: typer.Context) -> None:
+    """List installed plugins."""
+    from hermclaw.plugins import PluginManager
+
+    pm = PluginManager()
+    plugins = pm.list_plugins()
+    if not plugins:
+        console.print("No plugins installed. Use `hermclaw plugins install <git-url>` to add one.")
+        return
+    table = Table(title="Installed Plugins")
+    table.add_column("Name")
+    table.add_column("Version")
+    table.add_column("Description")
+    table.add_column("Enabled")
+    for p in plugins:
+        table.add_row(
+            p["name"],
+            p["version"],
+            p["description"][:60],
+            "[green]yes[/green]" if p["enabled"] else "[red]no[/red]",
+        )
+    console.print(table)
+
+
+@plugins_app.command("install")
+def plugins_install(
+    ctx: typer.Context,
+    source: str = typer.Argument(..., help="Git URL or local path"),
+) -> None:
+    """Install a plugin from a git repository."""
+    from hermclaw.plugins import PluginManager
+
+    pm = PluginManager()
+    try:
+        msg = pm.install_from_git(source)
+        console.print(f"[green]{msg}[/green]")
+    except Exception as exc:
+        err_console.print(f"[red]Install failed: {exc}[/red]")
+        raise typer.Exit(code=1)
+
+
+@plugins_app.command("uninstall")
+def plugins_uninstall(
+    ctx: typer.Context,
+    name: str = typer.Argument(..., help="Plugin name"),
+) -> None:
+    """Uninstall a plugin."""
+    from hermclaw.plugins import PluginManager
+
+    pm = PluginManager()
+    if pm.uninstall(name):
+        console.print(f"[green]Uninstalled plugin '{name}'[/green]")
+    else:
+        err_console.print(f"[red]Plugin '{name}' not found.[/red]")
+        raise typer.Exit(code=1)
+
+
+@plugins_app.command("create")
+def plugins_create(
+    ctx: typer.Context,
+    name: str = typer.Argument(..., help="Plugin name"),
+) -> None:
+    """Create a new plugin template."""
+    from hermclaw.plugins import PluginManager
+
+    pm = PluginManager()
+    path = pm.create_template(name)
+    console.print(f"[green]Created plugin template at: {path}[/green]")
+    console.print("Edit plugin.json and main.py to customize your plugin.")
+
+
+# =============================================================================
+# models
+# =============================================================================
+
+
+@app.command()
+def models(ctx: typer.Context) -> None:
+    """List all available models in the catalog."""
+    from hermclaw.brain.model_catalog import ModelCatalog
+
+    catalog = ModelCatalog()
+    if ctx.obj["json"]:
+        import json as json_mod
+        console.print_json(data=[
+            {"name": m.name, "provider": m.provider, "aliases": m.aliases,
+             "context_window": m.context_window, "description": m.description}
+            for m in catalog.list_all()
+        ])
+    else:
+        table = Table(title="Available Models")
+        table.add_column("Name", style="cyan")
+        table.add_column("Provider")
+        table.add_column("Aliases")
+        table.add_column("Context", justify="right")
+        table.add_column("Cost (in/out per 1M)")
+        table.add_column("Description")
+        for m in catalog.list_all():
+            aliases = ", ".join(m.aliases) if m.aliases else "—"
+            ctx_str = f"{m.context_window // 1000}K"
+            cost = f"${m.input_cost_per_1m:.2f}/${m.output_cost_per_1m:.2f}" if m.input_cost_per_1m > 0 else "free/local"
+            table.add_row(m.name, m.provider, aliases, ctx_str, cost, m.description[:50])
+        console.print(table)
+
+
 def main_entrypoint() -> None:
     app()
 
 
 if __name__ == "__main__":
     main_entrypoint()
+

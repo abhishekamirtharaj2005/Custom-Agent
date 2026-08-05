@@ -1,19 +1,16 @@
 # Hermclaw configuration
 # Full reference: docs/CONFIG_REFERENCE.md
-# Every *_env field names an ENVIRONMENT VARIABLE to read a secret from --
-# never put a literal token/key/password anywhere in this file.
+# Default: Ollama (local) with no guardrails and self-learning enabled.
 
 agent:
   name: "hermclaw"
   default_profile: "default"
-  list: []                          # multi-identity entries (optional), e.g.:
-                                     # - id: support
-                                     #   identity: { name: "Helpdesk", emoji: "🎫" }
-                                     #   profile: support_profile
+  language: "en"                     # en, es, de, fr, ja, ko, zh, pt, ru, hi, tr, it, uk, af, ga, hu
+  list: []                           # multi-identity entries (optional)
 
 body:
   gateway:
-    bind: "loopback"                # loopback | all
+    bind: "loopback"                 # loopback | all
     host: "127.0.0.1"
     port: 18789
     auth:
@@ -51,11 +48,14 @@ body:
 
 brain:
   model:
-    provider: "anthropic"            # anthropic | openai_compat | bedrock
-    model_name: "claude-sonnet-4-6"
-    api_key_env: "ANTHROPIC_API_KEY"
-    api_base_env: null
-    context_window: 200000
+    # DEFAULT: Ollama (local, no API key needed)
+    # Make sure Ollama is running: ollama serve
+    # Pull a model first: ollama pull gemma4:12b
+    provider: "openai_compat"
+    model_name: "gemma4:12b"
+    api_key_env: null                # Ollama doesn't need an API key
+    api_base_env: null               # defaults to http://localhost:11434/v1
+    context_window: 128000
     fallbacks: []                    # - provider: "openai_compat"
                                       #   model_name: "llama-3.1-70b"
                                       #   api_key_env: "OPENAI_COMPAT_API_KEY"
@@ -66,21 +66,21 @@ brain:
     memory_char_limit: 2200
     user_char_limit: 1375
   reflection:
-    enabled: true
+    enabled: true                    # self-learning: distill memory + skills from sessions
     trigger_every_n_turns: 20
 
 skills:
   directory: "~/.hermclaw/profiles/default/skills"
   extra_directories: []              # shared/team skill folders, read-only
-  evolution_enabled: false           # Tier 2 skill-evolution loop (optional, heavier)
+  evolution_enabled: true            # Tier 2 skill-evolution loop (self-learning)
   mcp_servers: []                    # - name: "example"
                                       #   transport: "stdio"
                                       #   command: "npx some-mcp-server"
 
 tools:
-  shell_enabled: false               # security-first default -- see ARCHITECTURE.md
+  shell_enabled: true                # NO GUARDRAILS: full system access
   approvals:
-    mode: "manual"                   # manual | smart | off
+    mode: "off"                      # manual | smart | off  (off = no guardrails)
   backend: "local"                   # local | docker | ssh | singularity | modal | daytona
   docker_image: "python:3.11-slim"
   docker_network: "none"
@@ -88,6 +88,6 @@ tools:
   ssh_user: null
   ssh_identity_file: null
   network_enabled: true
-  filesystem_scope: "~/.hermclaw/profiles/default/workspace"
+  filesystem_scope: "full"           # "full" = unrestricted access to entire filesystem
 
 profiles: {}                         # per-profile config overrides, keyed by profile name

@@ -146,6 +146,7 @@ class HermclawAgent:
         fallbacks: Optional[list[FallbackEntry]] = None,
         compressor: Optional[Any] = None,  # ContextCompressor; typed loosely to avoid a circular import
         max_tool_iterations: int = DEFAULT_MAX_TOOL_ITERATIONS,
+        vector_memory: Optional[Any] = None,  # VectorMemory for persistent recall
     ) -> None:
         self.profile = profile
         self.memory_store = memory_store
@@ -157,9 +158,11 @@ class HermclawAgent:
         self.fallbacks = fallbacks or []
         self.compressor = compressor
         self.max_tool_iterations = max_tool_iterations
+        self.vector_memory = vector_memory
+        self._turn_count = 0
 
     async def _send_with_fallback(
-        self, messages: list[dict[str, Any]], tools: list[Any], system: str
+        self, messages: list[dict[str, Any]], tools: list[Any], system: str, stream: bool = False,
     ) -> tuple[AgentResponse, ModelConfig]:
         candidates: list[tuple[ProviderTransport, ModelConfig]] = [(self.transport, self.model_config)]
         candidates.extend((f.transport, f.model_config) for f in self.fallbacks)
@@ -167,7 +170,7 @@ class HermclawAgent:
         last_exc: Optional[Exception] = None
         for i, (transport, model_cfg) in enumerate(candidates):
             try:
-                response = await transport.send(messages, tools, system)
+                response = await transport.send(messages, tools, system, stream=stream)
                 if i > 0:
                     logger.warning(
                         "agent.failed_over", from_provider=candidates[0][0].name,
@@ -206,17 +209,133 @@ class HermclawAgent:
 
         return "\n\n".join(parts)
 
-    async def run_turn(self, session_id: str, user_message: str) -> AgentTurnResult:
+    def _audit_tool_call(self, session_id: str, tool_name: str, result: ToolResult) -> None:
+        """Log a tool call to the audit system (best-effort, non-blocking)."""
+        try:
+            from hermclaw.security.audit import get_audit_logger
+            risk = "high" if tool_name in ("shell", "browser", "app_launcher", "code_exec") else "low"
+            get_audit_logger().log(
+                event_type="tool_call",
+                tool_name=tool_name,
+                session_id=session_id,
+                profile=self.profile,
+                details={"ok": result.ok, "output_len": len(result.output)},
+                risk_level=risk,
+                outcome="success" if result.ok else "failure",
+            )
+        except Exception:
+            pass  # Audit is best-effort, never break the main loop
+
+    async def _auto_recall(self, user_message: str) -> list[str]:
+        """Search vector memory for context relevant to the user's message.
+        Returns a list of relevant fact strings, or empty list."""
+        if not self.vector_memory:
+            return []
+        try:
+            results = await self.vector_memory.search(user_message, limit=5)
+            if not results:
+                return []
+            facts = []
+            for r in results:
+                sim = r.get("similarity", 0)
+                if sim < 0.3:  # skip low-relevance matches
+                    continue
+                content = r.get("content", "")
+                # Clean up the stored format
+                if content.startswith("User said: "):
+                    content = content[11:]  # strip prefix
+                facts.append(content)
+            return facts
+        except Exception as exc:
+            logger.debug("agent.auto_recall_failed", error=str(exc))
+            return []
+
+    async def _auto_save(self, session_id: str, user_message: str, assistant_text: str) -> None:
+        """Extract and persist important facts from the conversation.
+        Runs best-effort after each turn — never blocks the response."""
+        if not self.vector_memory or not assistant_text:
+            return
+        try:
+            # Save user's key statements (preferences, personal info, requests)
+            user_lower = user_message.lower().strip()
+
+            # Don't save questions — only save statements
+            is_question = user_lower.startswith(("do you", "can you", "what", "how", "why", "where",
+                                                  "when", "who", "which", "is there", "are there",
+                                                  "does", "did", "will", "would", "could", "should"))
+
+            save_triggers = [
+                "my name is", "i am ", "i'm ", "i like", "i prefer", "i want",
+                "i need", "i live", "i work", "don't forget", "please remember",
+                "call me", "my favorite", "i use", "i have", "my email",
+                "my phone", "my address", "i study", "my age",
+                "remember that", "remember this", "note that",
+            ]
+            should_save = not is_question and any(trigger in user_lower for trigger in save_triggers)
+
+            if should_save:
+                # Determine category
+                if any(t in user_lower for t in ["my name", "call me", "i am", "i'm", "my age", "i live", "i work", "i study"]):
+                    category = "user_info"
+                elif any(t in user_lower for t in ["i like", "i prefer", "my favorite", "i use"]):
+                    category = "user_preference"
+                else:
+                    category = "user_request"
+
+                await self.vector_memory.store(
+                    f"User said: {user_message}",
+                    category=category,
+                    metadata={"session_id": session_id, "type": "auto_saved"},
+                )
+                logger.info("agent.auto_saved_memory", category=category, preview=user_message[:80])
+
+                # Also persist to USER.md for durable cross-session context
+                try:
+                    self.identity_files.append_user_facts([user_message.strip()])
+                except Exception:
+                    pass
+
+            # Every 5 turns, save a conversation summary
+            self._turn_count += 1
+            if self._turn_count % 5 == 0 and assistant_text:
+                summary = f"Conversation context (turn {self._turn_count}): User asked about '{user_message[:100]}'. Agent responded about '{assistant_text[:100]}'"
+                await self.vector_memory.store(summary, category="conversation", metadata={"session_id": session_id})
+
+        except Exception as exc:
+            logger.debug("agent.auto_save_failed", error=str(exc))
+
+    async def run_turn(self, session_id: str, user_message: str, stream: bool = False) -> AgentTurnResult:
         await self.memory_store.a_add_message(session_id, "user", user_message)
 
         history_rows = await self.memory_store.a_get_session_messages(session_id, include_compressed_away=False)
         messages = rows_to_canonical_messages(history_rows)
 
         recent_summary = await self._build_recent_summary(session_id)
+
+        # Auto-recall: search persistent memory for relevant context
+        recalled_facts = await self._auto_recall(user_message)
+
         system_prompt = self.identity_files.assemble_system_prompt(
             recent_summary=recent_summary,
             skills_compact=self.skill_registry.compact_listing()
         )
+
+        # Inject recalled memories by appending them directly to the last
+        # user message. This is the most reliable approach for ALL model
+        # sizes — the model literally cannot ignore context that's part
+        # of the message it's responding to.
+        if recalled_facts and messages:
+            facts_text = "\n".join(f"- {f}" for f in recalled_facts)
+            augmented_content = (
+                f"{user_message}\n\n"
+                f"[Your memory recalls these relevant facts about the user. "
+                f"USE them in your response:]\n{facts_text}"
+            )
+            # Replace the last message's content (which is the current user message)
+            if messages[-1].get("role") == "user":
+                messages[-1] = {"role": "user", "content": augmented_content}
+            logger.info("agent.memory_recalled", facts_count=len(recalled_facts))
+
         tools = self.tool_dispatcher.specs()
 
         compressed = False
@@ -241,7 +360,9 @@ class HermclawAgent:
         tool_records: list[ToolCallRecord] = []
 
         for _ in range(self.max_tool_iterations):
-            response, _used_model_cfg = await self._send_with_fallback(messages, tools, system_prompt)
+            # Only stream the final response (not intermediate tool-use rounds)
+            use_stream = stream and len(tool_records) == 0
+            response, _used_model_cfg = await self._send_with_fallback(messages, tools, system_prompt, stream=use_stream)
             total_usage = add_usage(total_usage, response.usage)
 
             if response.tool_calls:
@@ -253,15 +374,43 @@ class HermclawAgent:
                 )
 
                 result_blocks = []
-                for tc in response.tool_calls:
-                    result = await self.tool_dispatcher.dispatch(tc.name, tc.arguments)
-                    tool_records.append(ToolCallRecord(name=tc.name, arguments=tc.arguments, result=result))
-                    result_blocks.append(tool_result_block(tc.id, result))
+
+                # Parallel execution when multiple tool calls arrive
+                if len(response.tool_calls) > 1:
+                    try:
+                        from hermclaw.brain.parallel_exec import execute_parallel
+                        par_result = await execute_parallel(
+                            self.tool_dispatcher,
+                            [{"name": tc.name, "arguments": tc.arguments, "id": tc.id} for tc in response.tool_calls],
+                            max_concurrent=5,
+                        )
+                        for tc, pr in zip(response.tool_calls, par_result.results):
+                            result = pr["result"]
+                            tool_records.append(ToolCallRecord(name=tc.name, arguments=tc.arguments, result=result))
+                            result_blocks.append(tool_result_block(tc.id, result))
+                            self._audit_tool_call(session_id, tc.name, result)
+                        if par_result.speedup > 1.2:
+                            logger.info("agent.parallel_speedup", speedup=par_result.speedup,
+                                        parallel_s=par_result.total_time_s, sequential_s=par_result.sequential_time_s)
+                    except ImportError:
+                        # Fallback to sequential
+                        for tc in response.tool_calls:
+                            result = await self.tool_dispatcher.dispatch(tc.name, tc.arguments)
+                            tool_records.append(ToolCallRecord(name=tc.name, arguments=tc.arguments, result=result))
+                            result_blocks.append(tool_result_block(tc.id, result))
+                            self._audit_tool_call(session_id, tc.name, result)
+                else:
+                    for tc in response.tool_calls:
+                        result = await self.tool_dispatcher.dispatch(tc.name, tc.arguments)
+                        tool_records.append(ToolCallRecord(name=tc.name, arguments=tc.arguments, result=result))
+                        result_blocks.append(tool_result_block(tc.id, result))
+                        self._audit_tool_call(session_id, tc.name, result)
 
                 messages.append({"role": "user", "content": result_blocks})
                 await self.memory_store.a_add_message(session_id, "tool", json.dumps(result_blocks))
                 continue
 
+            # Model produced a text response (possibly alongside tool calls on some providers)
             final_text = response.text
             final_stop = response.stop_reason
             await self.memory_store.a_add_message(session_id, "assistant", response.text)
@@ -269,8 +418,21 @@ class HermclawAgent:
         else:
             logger.warning("agent.max_tool_iterations_reached", session_id=session_id, limit=self.max_tool_iterations)
             final_stop = "max_tool_iterations"
+            # Synthesize a response from the tool results so the user isn't left with nothing
+            if tool_records and not final_text:
+                parts = []
+                for tr in tool_records:
+                    if tr.result.ok and tr.result.output:
+                        parts.append(f"[{tr.name}]: {tr.result.output[:500]}")
+                if parts:
+                    final_text = "Here are the results from the tools I used:\n\n" + "\n\n".join(parts)
+                else:
+                    final_text = "I used several tools but couldn't produce a final answer. Please try rephrasing your question."
 
         await self.memory_store.a_update_session_usage(session_id, token_delta=total_usage.total_tokens)
+
+        # Auto-save: persist important facts from this turn to long-term memory
+        await self._auto_save(session_id, user_message, final_text)
 
         return AgentTurnResult(
             session_id=session_id, text=final_text, tool_calls_made=tool_records,

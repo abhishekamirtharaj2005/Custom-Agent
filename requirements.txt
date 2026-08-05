@@ -1,0 +1,30 @@
+# Core dependencies
+pydantic>=2.0,<3
+ruamel.yaml>=0.18
+PyYAML>=6.0
+typer>=0.12
+rich>=13.0
+fastapi>=0.110
+uvicorn>=0.29
+apscheduler>=3.10,<4
+structlog>=24.0
+httpx>=0.27
+duckduckgo-search>=7.0
+psutil>=5.9
+
+# Optional: Model providers (uncomment as needed)
+# anthropic>=0.30          # Anthropic Claude
+# openai>=1.30             # OpenAI GPT-4o
+# boto3>=1.34              # AWS Bedrock
+
+# Optional: Messaging channels
+# python-telegram-bot>=21.0
+# discord.py>=2.3
+# slack_sdk>=3.27
+# slack_bolt>=1.18
+
+# Optional: Features
+# playwright>=1.40         # Browser automation
+# edge-tts>=6.1            # Text-to-speech
+# PyMuPDF>=1.24            # PDF extraction
+# mcp>=1.0                 # Model Context Protocol

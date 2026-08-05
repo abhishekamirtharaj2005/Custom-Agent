@@ -1,34 +1,60 @@
+# ============================================================
+# Hermclaw .gitignore
+# ============================================================
+
 # Python
 __pycache__/
 *.py[cod]
 *.pyo
+*.pyd
 *.egg-info/
 *.egg
 .eggs/
+*.so
+*.dylib
+
+# Testing
 .pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Type checking / linting
 .mypy_cache/
 .ruff_cache/
+.pytype/
 
 # Virtual environments
 .venv/
 venv/
 env/
+ENV/
 
 # Build artifacts
 build/
 dist/
 *.whl
+pip-wheel-metadata/
+*.manifest
+*.spec
 
-# SQLite databases (user state)
+# SQLite databases (user state -- generated at runtime)
 *.db
 *.db-wal
 *.db-shm
+*.db-journal
 
-# Hermclaw user data
+# Hermclaw user data (runtime profile data, never commit)
 .hermclaw/
+
+# Logs
+*.log
+logs/
 
 # Node.js (WhatsApp sidecar)
 node_modules/
+package-lock.json
 
 # WhatsApp auth state
 .wa-auth/
@@ -37,6 +63,7 @@ node_modules/
 .DS_Store
 Thumbs.db
 Desktop.ini
+ehthumbs.db
 
 # IDE / Editor
 .vscode/
@@ -44,7 +71,23 @@ Desktop.ini
 *.swp
 *.swo
 *~
+*.sublime-project
+*.sublime-workspace
 
-# Environment / secrets
+# Environment / secrets -- NEVER commit these
 .env
 .env.*
+.env.local
+.env.production
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+
+# Distribution / packaging
+*.tar.gz
+*.zip
+
+# Misc
+*.bak
+*.tmp
+*.temp

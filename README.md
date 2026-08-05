@@ -1,144 +1,337 @@
-# Hermclaw
+<h1 align="center">
+  🦀 HermClaw
+</h1>
 
-Hermclaw is a unified, self-improving personal AI agent. It merges two previously-separate frameworks into one coherent, one-command-installable Python package:
+<p align="center">
+  <strong>A unified, self-improving personal AI agent with 28 tools, no guardrails, and self-learning.</strong>
+</p>
 
-- **Body**, derived from OpenClaw: a local-first gateway, pluggable messaging channels, and a heartbeat/cron scheduler.
-- **Brain**, derived from Hermes Agent: a ReAct-style tool-calling loop, SQLite-backed memory with full-text recall, context compression, and a reflection loop that distills what it learns into durable memory and new skills over time.
+<p align="center">
+  <a href="#install">Install</a> •
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#tools">28 Tools</a> •
+  <a href="#configuration">Configuration</a> •
+  <a href="#model-providers">Model Providers</a> •
+  <a href="#commands">Commands</a>
+</p>
 
-Where the two source projects overlapped, Hermclaw picks one implementation deliberately rather than keeping both -- see [MERGE_DECISIONS.md](MERGE_DECISIONS.md) for every resolution and why. Where they didn't overlap, both capabilities are kept. The full architecture is documented in [ARCHITECTURE.md](ARCHITECTURE.md).
+---
 
-## What it does
+## What is HermClaw?
 
-Hermclaw runs continuously on your own machine. You talk to it over whichever channels you enable -- a local CLI, a small web widget, Telegram, Discord, Slack, or WhatsApp -- and it remembers what matters across sessions, checks in on a schedule if you want it to, and can safely run shell commands and MCP tools on your behalf, gated by an approval system that's off by default and opt-in when you want it.
+HermClaw merges two frameworks into one self-improving AI agent:
 
-It's also designed to get better at your specific use cases over time: a reflection loop periodically reviews recent sessions, distills durable facts into its memory, and notices when you've asked it to do the same multi-step procedure repeatedly -- turning that into a draft skill it can just run next time, instead of you re-explaining it.
+- **Body** (from OpenClaw): local-first gateway, messaging channels, cron scheduler
+- **Brain** (from Hermes Agent): ReAct tool-calling loop, SQLite memory, context compression, skill evolution
+
+**Key principles:**
+- 🔓 **No guardrails** — full system access by default (shell, filesystem, apps)
+- 🧠 **Self-learning** — reflection loop distills experience into memory and skills
+- 🏠 **Local-first** — runs on your machine with Ollama, no cloud API key required
+- 🛠️ **28 tools** — file I/O, shell, git, browser, code execution, web search, TTS, vision, PDF, and more
+- 🎮 **Fun** — virtual pet, achievements system, learning graph
+
+---
 
 ## Prerequisites
 
-- **Python 3.11 or later** (`python --version` to check)
-- **Git** (to clone the repo)
+| Requirement | How to check |
+|---|---|
+| **Python 3.11+** | `python --version` |
+| **Git** | `git --version` |
+| **Ollama** (recommended) | `ollama --version` — [Install Ollama](https://ollama.com/download) |
+
+---
 
 ## Install
 
-Hermclaw is installed from source. Clone the repo and set up a virtual environment:
+### Option 1: pip install (recommended)
 
 ```bash
+# Clone the repo
 git clone https://github.com/hermclaw/hermclaw.git
 cd hermclaw
 
-# Create and activate a virtual environment
+# Create virtual environment
 python -m venv .venv
 
-# Activate (pick your platform):
-source .venv/bin/activate        # Linux / macOS
-.venv\Scripts\activate           # Windows (PowerShell)
+# Activate it
+# Linux / macOS:
+source .venv/bin/activate
+# Windows (PowerShell):
+.venv\Scripts\activate
 
-# Install Hermclaw in editable mode
+# Install HermClaw
 pip install -e .
 ```
 
-Channel support beyond the local CLI and web widget is opt-in, since most people don't want every dependency for every chat platform:
+### Option 2: With all extras
 
 ```bash
-pip install -e ".[telegram,discord,slack]"   # or any subset
-pip install -e ".[bedrock]"                  # AWS Bedrock as a model provider
+pip install -e ".[all]"
 ```
 
-WhatsApp is a special case: it bridges to a small Node.js sidecar (there is no viable pure-Python WhatsApp client), which needs its own one-time setup:
+### Option 3: requirements.txt
 
 ```bash
-cd hermclaw/body/channels/whatsapp_sidecar && npm install
+pip install -r requirements.txt
+pip install -e .
 ```
 
-## First run
+### Optional extras
 
-### 1. Initialize configuration
+Install only what you need:
+
+```bash
+# Model providers
+pip install -e ".[anthropic]"        # Claude
+pip install -e ".[openai]"           # GPT-4o
+pip install -e ".[bedrock]"          # AWS Bedrock
+
+# Features
+pip install -e ".[browser]"          # Playwright browser automation
+pip install -e ".[voice]"            # Text-to-speech (edge-tts)
+pip install -e ".[pdf]"              # PDF text extraction (PyMuPDF)
+pip install -e ".[mcp]"              # Model Context Protocol
+
+# Messaging channels
+pip install -e ".[telegram]"
+pip install -e ".[discord]"
+pip install -e ".[slack]"
+pip install -e ".[channels]"         # All messaging channels
+
+# Everything
+pip install -e ".[all]"
+```
+
+---
+
+## Quick Start
+
+### 1. Pull an Ollama model (default)
+
+```bash
+ollama pull gemma4:12b
+ollama serve                         # start Ollama server (if not running)
+```
+
+### 2. Initialize config
 
 ```bash
 hermclaw doctor --init
 ```
 
-This writes a default config to `~/.hermclaw/hermclaw.yaml`. By default it's set up for Anthropic (Claude). You can use it as-is or switch providers — see [Model providers](#model-providers) below.
+This creates `~/.hermclaw/hermclaw.yaml` pre-configured for **Ollama** with **no guardrails** and **self-learning enabled**.
 
-### 2. Set your API key
-
-**Anthropic (default):**
+### 3. Start chatting
 
 ```bash
-# Linux / macOS
-export ANTHROPIC_API_KEY="your-key-here"
-
-# Windows (PowerShell)
-$env:ANTHROPIC_API_KEY = "your-key-here"
+hermclaw chat
 ```
 
-### 3. Verify and chat
+That's it. No API keys needed for local models.
+
+### One-shot mode (for scripting)
 
 ```bash
-hermclaw doctor      # verify everything checks out
-hermclaw chat        # start talking to it
+hermclaw run "list all Python files in the current directory"
 ```
 
-`hermclaw chat` is a lightweight, local-only conversation -- it doesn't start the gateway or any other channel. When you're ready to run it as a persistent agent across whichever channels you've configured:
+### Start the full gateway (multi-channel)
 
 ```bash
-hermclaw serve                # foreground
-hermclaw serve --daemonize    # detached, POSIX only
+hermclaw serve                       # foreground
+hermclaw serve --daemonize           # detached (POSIX only)
 ```
 
-## Model providers
+---
 
-Hermclaw supports three model providers: `anthropic` (default), `openai_compat`, and `bedrock`. The provider is configured in `~/.hermclaw/hermclaw.yaml` under `brain.model`.
+## Tools
 
-### Anthropic (default)
+HermClaw comes with **28 built-in tools** the agent can use autonomously:
 
-Works out of the box after `hermclaw doctor --init`. Just set `ANTHROPIC_API_KEY`.
+### File & Code (8 tools)
+| Tool | Description |
+|---|---|
+| `file_read` | Read files with line ranges |
+| `file_write` | Create and write files |
+| `file_edit` | Targeted search-and-replace editing |
+| `list_dir` | List directory contents |
+| `grep_search` | Regex search across files |
+| `code_exec` | Execute Python/JavaScript in sandbox |
+| `shell` | Run any shell command |
+| `git` | Git checkpoint, diff, rollback, stash, branch |
 
-### Google Gemini (via OpenAI-compatible endpoint)
+### Web & Browser (3 tools)
+| Tool | Description |
+|---|---|
+| `web_search` | DuckDuckGo search |
+| `url_read` | Extract content from URLs |
+| `browser` | Full Playwright browser automation (click, type, screenshot, JS eval) |
 
-Edit `~/.hermclaw/hermclaw.yaml` and change the `brain.model` section:
+### Media & Documents (4 tools)
+| Tool | Description |
+|---|---|
+| `image_generate` | DALL-E / fal.ai image generation |
+| `vision` | Image analysis (GPT-4o / Ollama LLaVA) |
+| `tts` | Text-to-speech with 15+ voices |
+| `pdf_read` | Extract text from PDF files |
+
+### Memory & Intelligence (3 tools)
+| Tool | Description |
+|---|---|
+| `memory` | Vector semantic search + keyword fallback |
+| `goals` | Autonomous long-running goal tracking |
+| `learning_graph` | Concept relationships + ASCII visualization |
+
+### Projects & Tasks (3 tools)
+| Tool | Description |
+|---|---|
+| `kanban` | Full project management board |
+| `todo` | Quick todo list |
+| `delegate` | Spawn sub-agents for parallel work |
+
+### System (5 tools)
+| Tool | Description |
+|---|---|
+| `app_launcher` | Open any app, URL, or file (40+ Windows app shortcuts) |
+| `clipboard` | Read/write system clipboard |
+| `notify` | System notifications (toast/alert) |
+| `system_info` | CPU, RAM, disk, network, GPU metrics |
+| `scheduler` | Cron jobs, intervals, one-shot timers |
+
+### Fun & Gamification (2 tools)
+| Tool | Description |
+|---|---|
+| `pet` | ASCII virtual pet (5 evolution stages, mood, hunger/energy) |
+| `achievements` | 24 achievements across 6 categories |
+
+---
+
+## Commands
+
+| Command | Purpose |
+|---|---|
+| `hermclaw chat` | Interactive local conversation |
+| `hermclaw run "prompt"` | One-shot mode: send prompt, get response, exit |
+| `hermclaw serve` | Start the gateway (all channels + scheduler + HTTP API) |
+| `hermclaw doctor` | Diagnostics, first-run wizard (`--init`), auto-fix (`--fix`) |
+| `hermclaw reflect` | Manually trigger the self-learning reflection loop |
+| `hermclaw models` | List all available models in the catalog |
+| `hermclaw skills` | List, validate, and inspect skills |
+| `hermclaw sessions` | List, show, export, and delete sessions |
+| `hermclaw plugins` | List, install, uninstall, create plugins |
+
+Every command accepts `--config`, `--profile`, and `--json` globally.
+
+---
+
+## Configuration
+
+Everything lives in `~/.hermclaw/hermclaw.yaml`. The defaults are:
+
+| Setting | Default | Description |
+|---|---|---|
+| Model provider | `openai_compat` (Ollama) | Local model, no API key |
+| Model | `gemma4:12b` | Change to any Ollama model |
+| Shell access | **Enabled** | Full system access |
+| Approvals | **Off** | No confirmation prompts |
+| Filesystem scope | **Full** | Unrestricted file access |
+| Self-learning | **Enabled** | Reflection + skill evolution |
+| Language | `en` | 16 languages available |
+
+See [`hermclaw.example.yaml`](hermclaw.example.yaml) for the fully-commented reference.
+
+---
+
+## Model Providers
+
+### Ollama (default — local, free)
+
+```bash
+ollama pull gemma4:12b
+ollama serve
+hermclaw chat
+```
+
+No config changes needed. Works out of the box.
+
+### Other Ollama models
+
+Edit `~/.hermclaw/hermclaw.yaml`:
+
+```yaml
+brain:
+  model:
+    model_name: "llama3.1:8b"        # or qwen2.5:14b, mistral, deepseek-r1, etc.
+```
+
+### Anthropic (Claude)
+
+```bash
+pip install -e ".[anthropic]"
+```
+
+```yaml
+brain:
+  model:
+    provider: "anthropic"
+    model_name: "claude-sonnet-4-6"
+    api_key_env: "ANTHROPIC_API_KEY"
+```
+
+```bash
+export ANTHROPIC_API_KEY="your-key-here"          # Linux/macOS
+$env:ANTHROPIC_API_KEY = "your-key-here"           # Windows PowerShell
+```
+
+### Google Gemini
 
 ```yaml
 brain:
   model:
     provider: "openai_compat"
-    model_name: "gemini-2.5-flash"       # or any Gemini model
+    model_name: "gemini-2.5-flash"
     api_key_env: "GEMINI_API_KEY"
     api_base_env: "GEMINI_API_BASE"
-    context_window: 1048576
 ```
-
-Then set the environment variables:
 
 ```bash
-# Linux / macOS
-export GEMINI_API_KEY="your-gemini-api-key"
+export GEMINI_API_KEY="your-key"
 export GEMINI_API_BASE="https://generativelanguage.googleapis.com/v1beta/openai"
-
-# Windows (PowerShell)
-$env:GEMINI_API_KEY = "your-gemini-api-key"
-$env:GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
 ```
 
-Get a Gemini API key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey).
+### OpenAI
 
-### Other OpenAI-compatible providers (Ollama, vLLM, LM Studio, OpenRouter, etc.)
-
-The `openai_compat` provider works with any server exposing a `/chat/completions` endpoint:
+```bash
+pip install -e ".[openai]"
+```
 
 ```yaml
 brain:
   model:
     provider: "openai_compat"
-    model_name: "your-model-name"
-    api_key_env: "OPENAI_COMPAT_API_KEY"
-    api_base_env: "OPENAI_COMPAT_API_BASE"
-    context_window: 128000
+    model_name: "gpt-4o"
+    api_key_env: "OPENAI_API_KEY"
+    api_base_env: null               # uses default OpenAI endpoint
+```
+
+### Any OpenAI-compatible server (vLLM, LM Studio, OpenRouter, etc.)
+
+```yaml
+brain:
+  model:
+    provider: "openai_compat"
+    model_name: "your-model"
+    api_key_env: "YOUR_API_KEY"
+    api_base_env: "YOUR_BASE_URL"    # e.g. http://localhost:8000/v1
 ```
 
 ### AWS Bedrock
 
-Requires the `bedrock` extra: `pip install -e ".[bedrock]"`. Uses your AWS credentials (environment variables or `~/.aws/credentials`).
+```bash
+pip install -e ".[bedrock]"
+```
 
 ```yaml
 brain:
@@ -147,43 +340,67 @@ brain:
     model_name: "anthropic.claude-sonnet-4-6-v1"
 ```
 
-## The five commands
+---
 
-Hermclaw's CLI is deliberately small:
+## Infrastructure
 
-| Command | Purpose |
+HermClaw includes production-grade infrastructure:
+
+| System | Description |
 |---|---|
-| `hermclaw chat` | Interactive local conversation for one profile |
-| `hermclaw serve` | Start the gateway: every enabled channel, the scheduler, the HTTP control API |
-| `hermclaw doctor` | Diagnostics, a first-run wizard (`--init`), auto-fixes (`--fix`), and a status snapshot |
-| `hermclaw reflect` | Manually trigger the reflection loop (it also runs automatically) |
-| `hermclaw skills` | `list`, `validate`, and `show` skills for a profile |
+| **Plugin System** | Discover, load, git install, create plugin templates |
+| **Audit Logging** | SQLite-backed audit trail of every tool call |
+| **Rate Limiting** | Per-tool rate limits (configurable) |
+| **Response Cache** | LRU cache with TTL for repeated queries |
+| **Parallel Execution** | Concurrent tool dispatch when multiple tools needed |
+| **Mixture-of-Agents** | Query multiple models and merge responses |
+| **i18n** | 16 languages (en, es, de, fr, ja, ko, zh, pt, ru, hi, tr, it, uk, af, ga, hu) |
+| **Model Catalog** | 16 pre-configured models across 7 providers |
 
-Every command accepts `--config`, `--profile`, and `--json` globally. See `hermclaw --help` and `docs/CONFIG_REFERENCE.md` for the full picture.
+---
 
-## Configuration
+## Project Structure
 
-Everything lives in one file, `~/.hermclaw/hermclaw.yaml`. `hermclaw.example.yaml` in this repo is the fully-commented reference version -- it's the literal file Hermclaw writes on first run. Every field is documented in [docs/CONFIG_REFERENCE.md](docs/CONFIG_REFERENCE.md).
+```
+hermclaw/
+├── hermclaw/
+│   ├── brain/              # Agent loop, memory, models, cache, learning graph
+│   │   ├── agent_loop.py   # ReAct-style tool-calling loop
+│   │   ├── memory/         # SQLite store, vector memory, compressor
+│   │   ├── cache.py        # Response cache (LRU + TTL)
+│   │   ├── learning_graph.py
+│   │   ├── model_catalog.py
+│   │   ├── moa.py          # Mixture-of-Agents
+│   │   ├── parallel_exec.py
+│   │   └── transports/     # Provider adapters (Anthropic, OpenAI, Bedrock)
+│   ├── body/               # Gateway, channels, scheduler
+│   ├── tools/              # All 28 tools
+│   ├── plugins/            # Plugin system
+│   ├── security/           # Audit logging, rate limiting, secrets
+│   ├── skills/             # Skill registry
+│   ├── cli.py              # CLI entry point (9 commands)
+│   ├── runtime.py          # Agent runtime builder
+│   ├── config.py           # Configuration system
+│   ├── i18n.py             # 16-language translations
+│   └── banner.py           # ASCII art branding
+├── tests/
+├── docs/
+├── hermclaw.example.yaml   # Reference configuration
+├── pyproject.toml
+├── requirements.txt
+└── README.md
+```
 
-A few defaults worth knowing about up front:
-
-- **`tools.shell_enabled: false`.** Shell access is off until you turn it on. This is a deliberate default -- see ARCHITECTURE.md's security section for why.
-- **`tools.approvals.mode: manual`.** When shell access is on, every command asks first, unless you change this.
-- **Config edits are safe to make while Hermclaw is running.** It watches its own config file and hot-reloads whatever changed without dropping other channels or losing state.
-
-## Skills
-
-Hermclaw uses the [agentskills.io](https://agentskills.io) open standard for skills -- the same format both source projects already used, so nothing new to learn. A skill is a directory with a `SKILL.md` file (YAML frontmatter plus Markdown instructions), optionally alongside `scripts/`, `references/`, and `assets/`. See [docs/SKILL_AUTHORING.md](docs/SKILL_AUTHORING.md) for how to write one by hand, and how the ones Hermclaw drafts for you automatically differ.
+---
 
 ## Development
 
 ```bash
-# After cloning and creating a venv (see Install above):
 pip install -e ".[dev]"
 pytest
 ```
 
-The default test run is fully offline -- every test that would otherwise need a real network connection is exercised against a fake instead (see `tests/conftest.py`), and a session-wide guard fails the run if anything tries to open a real connection outside a test explicitly marked `@pytest.mark.live`.
+---
 
 ## License
 
