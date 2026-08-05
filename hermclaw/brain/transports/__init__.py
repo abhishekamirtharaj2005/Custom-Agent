@@ -36,10 +36,8 @@ def build_transport(model_config) -> ProviderTransport:  # ModelConfig, kept unt
         api_key = resolve_env_ref(model_config.api_key_env)
         api_base = resolve_env_ref(model_config.api_base_env) if model_config.api_base_env else None
         if not api_base:
-            raise MissingCredentialsError(
-                f"provider 'openai_compat' requires an api_base -- "
-                f"set brain.model.api_base_env to an environment variable holding the server URL."
-            )
+            # Default to local Ollama if no api_base is configured
+            api_base = "http://localhost:11434/v1"
         from hermclaw.brain.transports.openai_compat import ChatCompletionsTransport
 
         return ChatCompletionsTransport(api_key=api_key, model_name=model_config.model_name, api_base=api_base)
