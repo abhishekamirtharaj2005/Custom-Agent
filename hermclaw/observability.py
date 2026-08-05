@@ -84,6 +84,13 @@ def configure_logging(
     root = logging.getLogger()
     root.handlers = handlers
     root.setLevel(level)
+
+    # Silence noisy third-party loggers that spam the console
+    # httpx logs every HTTP request at INFO level (including expected 404s
+    # from Ollama embedding endpoint probing)
+    for noisy in ("httpx", "httpcore", "httpcore.http11", "httpcore.connection"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
     return log_path
 
 
