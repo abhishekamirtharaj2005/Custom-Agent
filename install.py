@@ -271,7 +271,7 @@ def generate_config(settings: dict) -> str:
       socket_mode: true""")
 
     channels_yaml = "\n".join(channel_sections)
-    api_key_line = f'    api_key_env: "{provider_cfg["api_key_env"]}"' if provider_cfg.get("needs_key") else '    api_key_env: null'
+    api_key_line = f'    api_key_env: "{provider_cfg["api_key_env"]}"'
 
     shell_enabled = str(settings.get("shell_enabled", True)).lower()
     approval_mode = settings.get("approval_mode", "off")
