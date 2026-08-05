@@ -518,7 +518,24 @@ class HermclawAgent:
             # Model produced a text response (possibly alongside tool calls on some providers)
             final_text = response.text
             final_stop = response.stop_reason
-            await self.memory_store.a_add_message(session_id, "assistant", response.text)
+
+            # Fallback: if model returned empty text but we have tool results,
+            # synthesize a useful response from the tool outputs. Small models
+            # (gemma4, etc.) sometimes return empty content after tool use.
+            if not final_text.strip() and tool_records:
+                parts = []
+                for tr in tool_records:
+                    if tr.result.ok and tr.result.output:
+                        parts.append(tr.result.output[:2000])
+                    elif tr.result.error:
+                        parts.append(f"Error from {tr.name}: {tr.result.error}")
+                if parts:
+                    final_text = "Here's what I found:\n\n" + "\n\n".join(parts)
+                else:
+                    final_text = "I ran the tools but they didn't produce output. Could you try rephrasing?"
+                logger.info("agent.synthesized_response", reason="empty_model_text", tools_used=[tr.name for tr in tool_records])
+
+            await self.memory_store.a_add_message(session_id, "assistant", final_text)
             break
         else:
             logger.warning("agent.max_tool_iterations_reached", session_id=session_id, limit=self.max_tool_iterations)
