@@ -108,6 +108,110 @@ def approx_token_count(messages: list[dict[str, Any]], system: str) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Smart tool selection -- small models (< 30B) choke on 20+ tool defs.
+# We always include the ~8 core tools and dynamically add extras based
+# on keyword signals in the user message.
+# ---------------------------------------------------------------------------
+
+_CORE_TOOLS = {
+    "shell", "list_dir", "file_read", "file_write", "system_info",
+    "web_search", "code_exec", "memory",
+}
+
+_KEYWORD_TOOLS: dict[str, list[str]] = {
+    # keyword -> list of tool names to include
+    "file": ["file_edit", "grep_search", "list_dir"],
+    "folder": ["list_dir"],
+    "directory": ["list_dir"],
+    "search": ["grep_search", "web_search", "url_read"],
+    "grep": ["grep_search"],
+    "edit": ["file_edit"],
+    "git": ["git"],
+    "commit": ["git"],
+    "branch": ["git"],
+    "push": ["git"],
+    "pull": ["git"],
+    "repo": ["git"],
+    "url": ["url_read", "browser"],
+    "website": ["url_read", "browser", "web_search"],
+    "browse": ["browser", "url_read"],
+    "pdf": ["pdf_read"],
+    "image": ["image_generate", "vision"],
+    "photo": ["vision", "image_generate"],
+    "generate": ["image_generate"],
+    "see": ["vision"],
+    "look": ["vision"],
+    "task": ["kanban", "todo"],
+    "kanban": ["kanban"],
+    "todo": ["todo"],
+    "board": ["kanban"],
+    "goal": ["goals"],
+    "schedule": ["scheduler"],
+    "remind": ["scheduler"],
+    "cron": ["scheduler"],
+    "timer": ["scheduler"],
+    "alarm": ["scheduler", "notify"],
+    "speak": ["tts"],
+    "say": ["tts"],
+    "voice": ["tts"],
+    "read aloud": ["tts"],
+    "clipboard": ["clipboard"],
+    "copy": ["clipboard"],
+    "paste": ["clipboard"],
+    "notify": ["notify"],
+    "notification": ["notify"],
+    "alert": ["notify"],
+    "pet": ["pet"],
+    "cat": ["pet"],
+    "achievement": ["achievements"],
+    "badge": ["achievements"],
+    "open": ["app_launcher", "browser"],
+    "launch": ["app_launcher"],
+    "app": ["app_launcher"],
+    "notepad": ["app_launcher"],
+    "chrome": ["app_launcher"],
+    "delegate": ["delegate"],
+    "learn": ["learning_graph"],
+    "history": ["session_search"],
+    "remember": ["memory", "session_search"],
+    "recall": ["memory", "session_search"],
+}
+
+# Maximum total tools to send to the model
+_MAX_TOOLS = 12
+
+
+def select_tools_for_query(
+    all_specs: list,  # list[ToolSpec]
+    user_message: str,
+) -> list:  # list[ToolSpec]
+    """Pick the most relevant tools for a user message.
+
+    Always includes _CORE_TOOLS. Adds extras based on keyword matches
+    in the user message, up to _MAX_TOOLS total.
+    """
+    msg_lower = user_message.lower()
+    selected_names: set[str] = set(_CORE_TOOLS)
+
+    # Add keyword-matched tools
+    for keyword, tool_names in _KEYWORD_TOOLS.items():
+        if keyword in msg_lower:
+            selected_names.update(tool_names)
+
+    # Build the filtered list, preserving registration order
+    core = [s for s in all_specs if s.name in _CORE_TOOLS]
+    extras = [s for s in all_specs if s.name in selected_names and s.name not in _CORE_TOOLS]
+
+    result = core + extras
+    if len(result) > _MAX_TOOLS:
+        result = result[:_MAX_TOOLS]
+
+    logger.debug("agent.tool_selection", total_available=len(all_specs),
+                 selected=len(result), names=[s.name for s in result])
+    return result
+
+
+# ---------------------------------------------------------------------------
 
 
 @dataclasses.dataclass
@@ -336,7 +440,8 @@ class HermclawAgent:
                 messages[-1] = {"role": "user", "content": augmented_content}
             logger.info("agent.memory_recalled", facts_count=len(recalled_facts))
 
-        tools = self.tool_dispatcher.specs()
+        all_tools = self.tool_dispatcher.specs()
+        tools = select_tools_for_query(all_tools, user_message)
 
         compressed = False
         if self.compressor is not None:
