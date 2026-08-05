@@ -72,9 +72,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/hermclaw/hermclaw"
-Documentation = "https://github.com/hermclaw/hermclaw/blob/main/README.md"
-Issues = "https://github.com/hermclaw/hermclaw/issues"
+Homepage = "https://github.com/abhishekamirtharaj2005/Custom-Agent"
+Documentation = "https://github.com/abhishekamirtharaj2005/Custom-Agent/blob/main/README.md"
+Issues = "https://github.com/abhishekamirtharaj2005/Custom-Agent/issues"
 
 [project.scripts]
 hermclaw = "hermclaw.cli:main_entrypoint"

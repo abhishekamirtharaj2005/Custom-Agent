@@ -43,25 +43,50 @@ HermClaw merges two frameworks into one self-improving AI agent:
 
 ---
 
-## Install
-
-### Option 1: pip install (recommended)
+## Install (One Command)
 
 ```bash
-# Clone the repo
-git clone https://github.com/hermclaw/hermclaw.git
-cd hermclaw
+git clone https://github.com/abhishekamirtharaj2005/Custom-Agent.git
+cd Custom-Agent
+python install.py
+```
 
-# Create virtual environment
+The setup wizard will interactively ask you:
+
+1. **Model Provider** — Ollama (local/free), OpenAI, Anthropic, Groq, OpenRouter, or custom
+2. **Model** — Pick from available models for your chosen provider
+3. **API Key** — Enter your API key (or skip for Ollama)
+4. **Chat Platforms** — Enable Telegram, Discord, Slack bots (optional)
+5. **Security** — Shell access and approval mode
+
+Then it automatically:
+- ✅ Installs hermclaw + required extras
+- ✅ Generates `~/.hermclaw/hermclaw.yaml`
+- ✅ Saves API keys to `~/.hermclaw/.env`
+- ✅ Pulls Ollama model (if applicable)
+- ✅ Verifies the installation
+
+### Re-run setup anytime
+
+```bash
+hermclaw setup
+```
+
+---
+
+## Manual Install (Alternative)
+
+<details>
+<summary>Click to expand manual installation steps</summary>
+
+### Option 1: pip install
+
+```bash
+git clone https://github.com/abhishekamirtharaj2005/Custom-Agent.git
+cd Custom-Agent
 python -m venv .venv
-
-# Activate it
-# Linux / macOS:
-source .venv/bin/activate
-# Windows (PowerShell):
-.venv\Scripts\activate
-
-# Install HermClaw
+# Linux/macOS: source .venv/bin/activate
+# Windows: .venv\Scripts\activate
 pip install -e .
 ```
 
@@ -80,50 +105,38 @@ pip install -e .
 
 ### Optional extras
 
-Install only what you need:
-
 ```bash
 # Model providers
 pip install -e ".[anthropic]"        # Claude
 pip install -e ".[openai]"           # GPT-4o
-pip install -e ".[bedrock]"          # AWS Bedrock
 
 # Features
-pip install -e ".[browser]"          # Playwright browser automation
-pip install -e ".[voice]"            # Text-to-speech (edge-tts)
-pip install -e ".[pdf]"              # PDF text extraction (PyMuPDF)
-pip install -e ".[mcp]"              # Model Context Protocol
+pip install -e ".[browser]"          # Playwright browser
+pip install -e ".[voice]"            # Text-to-speech
+pip install -e ".[pdf]"              # PDF extraction
 
 # Messaging channels
-pip install -e ".[telegram]"
-pip install -e ".[discord]"
-pip install -e ".[slack]"
-pip install -e ".[channels]"         # All messaging channels
+pip install -e ".[telegram,discord,slack]"
 
 # Everything
 pip install -e ".[all]"
 ```
 
+### Quick Start (manual)
+
+```bash
+ollama pull gemma4:12b && ollama serve
+hermclaw doctor --init
+hermclaw chat
+```
+
+</details>
+
 ---
 
 ## Quick Start
 
-### 1. Pull an Ollama model (default)
-
-```bash
-ollama pull gemma4:12b
-ollama serve                         # start Ollama server (if not running)
-```
-
-### 2. Initialize config
-
-```bash
-hermclaw doctor --init
-```
-
-This creates `~/.hermclaw/hermclaw.yaml` pre-configured for **Ollama** with **no guardrails** and **self-learning enabled**.
-
-### 3. Start chatting
+After installation (either method), just run:
 
 ```bash
 hermclaw chat

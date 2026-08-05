@@ -824,6 +824,29 @@ def models(ctx: typer.Context) -> None:
         console.print(table)
 
 
+@app.command("setup")
+def setup_command() -> None:
+    """Interactive setup wizard — configure model provider, API keys, channels, and install."""
+    from install import main as setup_main
+    try:
+        setup_main()
+    except (ImportError, ModuleNotFoundError):
+        # install.py is at project root, find it
+        import importlib.util
+        import inspect
+        # Try relative to the project
+        cli_dir = Path(inspect.getfile(inspect.currentframe())).resolve().parent.parent
+        install_path = cli_dir / "install.py"
+        if install_path.exists():
+            spec = importlib.util.spec_from_file_location("install", str(install_path))
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            mod.main()
+        else:
+            console.print("[bold red]✗[/] Could not find install.py. Run `python install.py` from the project root instead.")
+            raise typer.Exit(1)
+
+
 def main_entrypoint() -> None:
     app()
 
