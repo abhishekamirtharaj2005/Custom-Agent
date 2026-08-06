@@ -31,7 +31,7 @@ class GitTool(ToolABC):
                 "properties": {
                     "action": {
                         "type": "string",
-                        "enum": ["status", "diff", "checkpoint", "log", "rollback", "stash", "branch", "init"],
+                        "enum": ["status", "diff", "checkpoint", "log", "show", "rollback", "stash", "branch", "init"],
                     },
                     "message": {"type": "string", "description": "Commit message (checkpoint)."},
                     "path": {"type": "string", "description": "Working directory path."},
@@ -81,7 +81,15 @@ class GitTool(ToolABC):
             elif action == "log":
                 n = args.get("n", 10)
                 return self._run_git(
-                    ["log", f"--oneline", f"-{n}", "--decorate", "--graph"],
+                    ["log", "--oneline", f"-{n}", "--decorate", "--graph"],
+                    cwd,
+                )
+
+            elif action == "show":
+                # Show details of the latest (or Nth) commit
+                n = args.get("n", 1)
+                return self._run_git(
+                    ["log", f"-{n}", "--stat", "--format=Commit: %H%nAuthor: %an <%ae>%nDate: %ai%nMessage: %s%n"],
                     cwd,
                 )
 
