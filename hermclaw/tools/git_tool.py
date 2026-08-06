@@ -130,16 +130,29 @@ class GitTool(ToolABC):
 
     def _run_git(self, cmd: list[str], cwd: str) -> ToolResult:
         try:
+            import structlog
+            _log = structlog.get_logger(__name__)
+            _log.debug("git.run_command", cmd=["git"] + cmd, cwd=cwd)
+
             result = subprocess.run(
                 ["git"] + cmd,
                 cwd=cwd,
                 capture_output=True,
                 text=True,
                 timeout=30,
+                encoding="utf-8",
+                errors="replace",
             )
             output = result.stdout
-            if result.stderr and result.returncode != 0:
-                output += "\n" + result.stderr
+            # Include stderr in output for success cases too (git uses stderr for info)
+            if result.stderr:
+                if result.returncode != 0:
+                    output += "\n" + result.stderr
+                else:
+                    # Some git commands output useful info on stderr
+                    _log.debug("git.stderr_on_success", stderr=result.stderr[:200])
+            if not output.strip() and result.returncode == 0:
+                output = "(command completed successfully but produced no output)"
             if len(output) > 8000:
                 output = output[:8000] + "\n... [truncated]"
             return ToolResult(
