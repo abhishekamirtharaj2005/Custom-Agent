@@ -40,7 +40,12 @@ def build_transport(model_config) -> ProviderTransport:  # ModelConfig, kept unt
             api_base = "http://localhost:11434/v1"
         from hermclaw.brain.transports.openai_compat import ChatCompletionsTransport
 
-        return ChatCompletionsTransport(api_key=api_key, model_name=model_config.model_name, api_base=api_base)
+        return ChatCompletionsTransport(
+            api_key=api_key,
+            model_name=model_config.model_name,
+            api_base=api_base,
+            max_tokens=16384,  # gemma4 uses internal reasoning tokens; 4096 is too small
+        )
 
     if provider == "bedrock":
         try:
