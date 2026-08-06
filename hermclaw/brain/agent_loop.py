@@ -464,11 +464,35 @@ class HermclawAgent:
         total_usage = Usage()
         tool_records: list[ToolCallRecord] = []
 
-        for _ in range(self.max_tool_iterations):
+        for iteration in range(self.max_tool_iterations):
             # Only stream the final response (not intermediate tool-use rounds)
             use_stream = stream and len(tool_records) == 0
-            response, _used_model_cfg = await self._send_with_fallback(messages, tools, system_prompt, stream=use_stream)
-            total_usage = add_usage(total_usage, response.usage)
+
+            # Retry up to 2 times if model returns completely empty
+            response = None
+            for retry in range(3):
+                resp_candidate, _used_model_cfg = await self._send_with_fallback(
+                    messages, tools, system_prompt, stream=(use_stream and retry == 0),
+                )
+                total_usage = add_usage(total_usage, resp_candidate.usage)
+
+                if resp_candidate.text.strip() or resp_candidate.tool_calls:
+                    response = resp_candidate
+                    break
+                logger.warning("agent.empty_response_retry", retry=retry + 1,
+                               iteration=iteration, stop_reason=resp_candidate.stop_reason)
+
+            if response is None:
+                # All retries returned empty. If this is the first iteration
+                # (no tools used yet), try to produce a helpful fallback.
+                logger.warning("agent.all_retries_empty", iteration=iteration)
+                final_text = (
+                    "I'm having trouble processing that request right now. "
+                    "Could you try rephrasing it or breaking it into simpler steps?"
+                )
+                final_stop = "empty_response"
+                await self.memory_store.a_add_message(session_id, "assistant", final_text)
+                break
 
             if response.tool_calls:
                 assistant_blocks = assistant_content_from_response(response)
