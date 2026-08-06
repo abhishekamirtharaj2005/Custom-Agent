@@ -20,7 +20,13 @@ logger = structlog.get_logger(__name__)
 
 
 class WebSearchTool(ToolABC):
-    """Search the web using DuckDuckGo (free, no API key)."""
+    """Search the web (free, no API key required).
+
+    Backends tried in order:
+    1. ddgs library (pip install ddgs) — uses DuckDuckGo/Bing
+    2. Direct Bing HTML scraping — always available
+    3. DuckDuckGo HTML lite — secondary fallback
+    """
 
     def spec(self) -> ToolSpec:
         return ToolSpec(
@@ -44,39 +50,122 @@ class WebSearchTool(ToolABC):
         query = args["query"]
         num = min(args.get("num_results", 5), 10)
 
-        try:
-            # Try using duckduckgo-search library first
-            try:
-                from duckduckgo_search import DDGS
-                with DDGS() as ddgs:
-                    results = list(ddgs.text(query, max_results=num))
-                if not results:
-                    return ToolResult(ok=True, output="No results found.")
-                output_parts = []
-                for i, r in enumerate(results, 1):
-                    output_parts.append(
-                        f"{i}. **{r.get('title', 'No title')}**\n"
-                        f"   URL: {r.get('href', r.get('link', 'N/A'))}\n"
-                        f"   {r.get('body', r.get('snippet', 'No description'))}"
-                    )
-                return ToolResult(ok=True, output="\n\n".join(output_parts))
-            except ImportError:
-                pass
+        # Backend 1: ddgs library
+        result = await self._try_ddgs(query, num)
+        if result:
+            return result
 
-            # Fallback: scrape DuckDuckGo HTML lite
+        # Backend 2: Direct Bing HTML scraping
+        result = await self._try_bing_scrape(query, num)
+        if result:
+            return result
+
+        # Backend 3: DuckDuckGo HTML lite
+        result = await self._try_ddg_lite(query, num)
+        if result:
+            return result
+
+        return ToolResult(ok=True, output="No search results found. Try rephrasing your query or using url_read to fetch a specific URL.")
+
+    async def _try_ddgs(self, query: str, num: int) -> Optional[ToolResult]:
+        """Try the ddgs library (new name for duckduckgo-search)."""
+        try:
+            # Try new 'ddgs' package first
+            try:
+                from ddgs import DDGS
+            except ImportError:
+                try:
+                    from duckduckgo_search import DDGS
+                except ImportError:
+                    return None
+
+            import asyncio
+            # Run in thread since DDGS is synchronous and may block
+            def _search():
+                try:
+                    return list(DDGS().text(query, max_results=num))
+                except Exception:
+                    return []
+
+            results = await asyncio.get_event_loop().run_in_executor(None, _search)
+            if not results:
+                return None
+
+            return self._format_results(results, key_title="title",
+                                         key_url=["href", "link"],
+                                         key_snippet=["body", "snippet"])
+        except Exception as exc:
+            logger.debug("web_search.ddgs_failed", error=str(exc)[:100])
+            return None
+
+    async def _try_bing_scrape(self, query: str, num: int) -> Optional[ToolResult]:
+        """Scrape Bing search results directly."""
+        try:
+            url = f"https://www.bing.com/search?q={quote_plus(query)}&count={num}"
+            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+                resp = await client.get(url, headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Accept": "text/html,application/xhtml+xml",
+                    "Accept-Language": "en-US,en;q=0.9",
+                })
+                resp.raise_for_status()
+                html = resp.text
+
+            results = []
+            # Bing results are in <li class="b_algo"> blocks
+            algo_pattern = re.compile(r'<li[^>]*class="b_algo"[^>]*>(.*?)</li>', re.DOTALL)
+            title_link_pattern = re.compile(r'<a[^>]+href="(https?://[^"]+)"[^>]*>(.*?)</a>', re.DOTALL)
+            snippet_pattern = re.compile(r'<p[^>]*>(.*?)</p>', re.DOTALL)
+
+            blocks = algo_pattern.findall(html)
+            for i, block in enumerate(blocks[:num]):
+                title_match = title_link_pattern.search(block)
+                snippet_match = snippet_pattern.search(block)
+                if title_match:
+                    href = title_match.group(1)
+                    title = re.sub(r'<[^>]+>', '', title_match.group(2)).strip()
+                    snippet = ""
+                    if snippet_match:
+                        snippet = re.sub(r'<[^>]+>', '', snippet_match.group(1)).strip()
+                    results.append(f"{i+1}. **{title}**\n   URL: {href}\n   {snippet}")
+
+            if not results:
+                # Try alternative Bing result format
+                alt_pattern = re.compile(
+                    r'<h2[^>]*>\s*<a[^>]+href="(https?://[^"]+)"[^>]*>(.*?)</a>', re.DOTALL
+                )
+                matches = alt_pattern.findall(html)
+                for i, (href, title) in enumerate(matches[:num]):
+                    title_clean = re.sub(r'<[^>]+>', '', title).strip()
+                    if title_clean and not href.startswith("https://www.bing.com"):
+                        results.append(f"{i+1}. **{title_clean}**\n   URL: {href}")
+
+            if not results:
+                return None
+            return ToolResult(ok=True, output="\n\n".join(results))
+
+        except Exception as exc:
+            logger.debug("web_search.bing_scrape_failed", error=str(exc)[:100])
+            return None
+
+    async def _try_ddg_lite(self, query: str, num: int) -> Optional[ToolResult]:
+        """Scrape DuckDuckGo HTML lite version."""
+        try:
             url = f"https://lite.duckduckgo.com/lite/?q={quote_plus(query)}"
             async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
                 resp = await client.get(url, headers={
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 })
                 resp.raise_for_status()
                 text = resp.text
 
-            # Extract results from DuckDuckGo lite HTML
             results = []
-            # Find all result links
-            link_pattern = re.compile(r'<a[^>]+rel="nofollow"[^>]+href="([^"]+)"[^>]*>\s*(.*?)\s*</a>', re.DOTALL)
-            snippet_pattern = re.compile(r'<td[^>]*class="result-snippet"[^>]*>(.*?)</td>', re.DOTALL)
+            link_pattern = re.compile(
+                r'<a[^>]+rel="nofollow"[^>]+href="([^"]+)"[^>]*>\s*(.*?)\s*</a>', re.DOTALL
+            )
+            snippet_pattern = re.compile(
+                r'<td[^>]*class="result-snippet"[^>]*>(.*?)</td>', re.DOTALL
+            )
 
             links = link_pattern.findall(text)
             snippets = snippet_pattern.findall(text)
@@ -87,11 +176,32 @@ class WebSearchTool(ToolABC):
                 results.append(f"{i+1}. **{title_clean}**\n   URL: {href}\n   {snippet}")
 
             if not results:
-                return ToolResult(ok=True, output="No results found. Try a different query.")
+                return None
             return ToolResult(ok=True, output="\n\n".join(results))
 
         except Exception as exc:
-            return ToolResult(ok=False, output="", error=f"Search error: {exc}")
+            logger.debug("web_search.ddg_lite_failed", error=str(exc)[:100])
+            return None
+
+    @staticmethod
+    def _format_results(results: list, key_title: str,
+                        key_url: list[str], key_snippet: list[str]) -> ToolResult:
+        """Format search result dicts into readable text."""
+        output_parts = []
+        for i, r in enumerate(results, 1):
+            title = r.get(key_title, "No title")
+            url = "N/A"
+            for k in key_url:
+                if k in r:
+                    url = r[k]
+                    break
+            snippet = "No description"
+            for k in key_snippet:
+                if k in r:
+                    snippet = r[k]
+                    break
+            output_parts.append(f"{i}. **{title}**\n   URL: {url}\n   {snippet}")
+        return ToolResult(ok=True, output="\n\n".join(output_parts))
 
 
 class UrlReadTool(ToolABC):
