@@ -25,7 +25,6 @@ from hermclaw.skills.registry import SkillRegistry
 from hermclaw.tools.approvals import build_approval_gate
 from hermclaw.tools.base import ToolDispatcher
 from hermclaw.tools.browser_tool import BrowserTool
-from hermclaw.tools.code_exec import CodeExecTool
 from hermclaw.tools.delegate_tool import DelegateTool
 from hermclaw.tools.file_tools import (
     FileEditTool,
@@ -132,7 +131,7 @@ async def build_agent_runtime(
     dispatcher.register(BrowserTool())
 
     # Code execution tool
-    dispatcher.register(CodeExecTool())
+    dispatcher.register(CodeSandboxTool())
 
     # Media tools -- image generation and vision
     dispatcher.register(ImageGenerateTool())
