@@ -87,7 +87,7 @@ class ChatCompletionsTransport(ProviderTransport):
                     out.append({"role": "tool", "tool_call_id": tr["tool_use_id"], "content": tr["content"]})
                 continue
 
-            msg: dict[str, Any] = {"role": role, "content": "\n".join(text_parts) if text_parts else None}
+            msg: dict[str, Any] = {"role": role, "content": "\n".join(text_parts) if text_parts else ""}
             if tool_calls:
                 msg["tool_calls"] = tool_calls
             out.append(msg)

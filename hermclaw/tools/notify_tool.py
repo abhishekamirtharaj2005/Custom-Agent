@@ -1,22 +1,19 @@
 """Notification tool: send system notifications and alerts.
 
 Supports:
-- Windows toast notifications (via WinForms NotifyIcon)
-- macOS notification center
-- Linux desktop notifications (notify-send)
+- Windows: ctypes MessageBox (always works, no dependencies)
+- macOS: notification center
+- Linux: notify-send
 """
 
 from __future__ import annotations
 
 import platform
 import subprocess
-from pathlib import Path
+import threading
 from typing import Any
 
 from hermclaw.tools.base import ToolABC, ToolResult, ToolSpec
-
-# Path to the PowerShell notification helper script
-_NOTIFY_PS1 = Path(__file__).parent / "notify.ps1"
 
 
 class NotifyTool(ToolABC):
@@ -26,7 +23,7 @@ class NotifyTool(ToolABC):
         return ToolSpec(
             name="notify",
             description=(
-                "Send a system notification to the user. Works on Windows (toast), "
+                "Send a system notification to the user. Works on Windows (popup), "
                 "macOS (notification center), and Linux (notify-send). "
                 "Use to alert the user when a long task completes."
             ),
@@ -56,19 +53,7 @@ class NotifyTool(ToolABC):
         system = platform.system()
         try:
             if system == "Windows":
-                result = subprocess.run(
-                    [
-                        "powershell", "-ExecutionPolicy", "Bypass",
-                        "-File", str(_NOTIFY_PS1),
-                        title, message,
-                    ],
-                    capture_output=True, text=True, timeout=15,
-                )
-                if result.returncode != 0:
-                    return ToolResult(
-                        ok=False, output="",
-                        error=f"Notification failed: {result.stderr.strip()}"
-                    )
+                self._windows_notify(title, message)
 
             elif system == "Darwin":
                 subprocess.run(
@@ -85,3 +70,22 @@ class NotifyTool(ToolABC):
         except Exception as exc:
             return ToolResult(ok=False, output="", error=f"Notification failed: {exc}")
 
+    @staticmethod
+    def _windows_notify(title: str, message: str) -> None:
+        """Show a Windows notification using ctypes MessageBox in a thread.
+
+        This is the most reliable approach on Windows — no external
+        dependencies required, works from any context (console, venv, etc.).
+        The MessageBox runs in a daemon thread so it doesn't block the agent.
+        """
+        import ctypes
+
+        # MB_OK | MB_ICONINFORMATION | MB_SYSTEMMODAL
+        # MB_SYSTEMMODAL (0x1000) makes it appear on top of all windows
+        FLAGS = 0x40 | 0x1000
+
+        def _show():
+            ctypes.windll.user32.MessageBoxW(0, message, title, FLAGS)
+
+        t = threading.Thread(target=_show, daemon=True)
+        t.start()
