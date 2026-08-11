@@ -45,7 +45,14 @@ def tool_use_block(tc: ToolCallRequest) -> dict[str, Any]:
 
 def tool_result_block(tool_use_id: str, result: ToolResult) -> dict[str, Any]:
     content = result.output if result.ok else (result.error or "Tool execution failed")
-    return {"type": "tool_result", "tool_use_id": tool_use_id, "content": str(content), "is_error": not result.ok}
+    content = str(content)
+    # Truncate large tool outputs to prevent overwhelming small models.
+    # gemma4:26b spends reasoning tokens proportional to context size;
+    # 50K char PDF outputs cause max_tokens exhaustion.
+    MAX_TOOL_RESULT = 4000
+    if len(content) > MAX_TOOL_RESULT:
+        content = content[:MAX_TOOL_RESULT] + "\n... [output truncated]"
+    return {"type": "tool_result", "tool_use_id": tool_use_id, "content": content, "is_error": not result.ok}
 
 
 def assistant_content_from_response(response: AgentResponse) -> list[dict[str, Any]]:
