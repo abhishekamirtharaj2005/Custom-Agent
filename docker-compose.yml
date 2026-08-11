@@ -1,0 +1,38 @@
+# HermClaw — Docker Compose Configuration
+
+services:
+  hermclaw:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hermclaw
+    restart: unless-stopped
+    ports:
+      - "8765:8765"   # WebSocket gateway
+      - "8080:8080"   # HTTP API
+    volumes:
+      - hermclaw_data:/home/hermclaw/.hermclaw
+      - ./hermclaw.yaml:/home/hermclaw/.hermclaw/hermclaw.yaml:ro
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - BRAVE_API_KEY=${BRAVE_API_KEY:-}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY:-}
+      - XAI_API_KEY=${XAI_API_KEY:-}
+      - HERMCLAW_LOG_LEVEL=${HERMCLAW_LOG_LEVEL:-INFO}
+    healthcheck:
+      test: ["CMD", "hermclaw", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+
+volumes:
+  hermclaw_data:
+    driver: local

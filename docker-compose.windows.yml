@@ -1,0 +1,10 @@
+# Docker Compose — Windows override
+# Adds Windows-specific volume mounts and paths
+
+services:
+  hermclaw:
+    volumes:
+      - hermclaw_data:/home/hermclaw/.hermclaw
+      - ./hermclaw.yaml:/home/hermclaw/.hermclaw/hermclaw.yaml:ro
+    environment:
+      - HERMCLAW_PLATFORM=windows

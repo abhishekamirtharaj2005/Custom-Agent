@@ -217,6 +217,15 @@ _KEYWORD_TOOLS: dict[str, list[str]] = {
     "exa": ["exa_search"],
     "tavily": ["tavily_search"],
     "semantic search": ["exa_search"],
+    "twitter": ["twitter_search"],
+    "tweet": ["twitter_search"],
+    "spotify": ["spotify"],
+    "music": ["spotify"],
+    "song": ["spotify"],
+    "smart home": ["home_assistant"],
+    "lights": ["home_assistant"],
+    "thermostat": ["home_assistant"],
+    "home assistant": ["home_assistant"],
 }
 
 # Maximum total tools to send to the model

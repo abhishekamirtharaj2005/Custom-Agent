@@ -55,6 +55,7 @@ from hermclaw.tools.media_extra import (
 )
 from hermclaw.tools.virtual_pet import VirtualPetTool
 from hermclaw.tools.web_tools import UrlReadTool, WebSearchTool
+from hermclaw.tools.protocol_tools import TwitterSearchTool, SpotifyTool, HomeAssistantTool
 
 logger = structlog.get_logger(__name__)
 
@@ -194,6 +195,11 @@ async def build_agent_runtime(
     # Additional search providers
     dispatcher.register(ExaSearchTool())
     dispatcher.register(TavilySearchTool())
+
+    # Protocol integrations
+    dispatcher.register(TwitterSearchTool())
+    dispatcher.register(SpotifyTool())
+    dispatcher.register(HomeAssistantTool())
 
     # Session search -- the agent's episodic recall tool.
     dispatcher.register(SessionSearchTool(memory_store))
