@@ -221,8 +221,13 @@ class ChatCompletionsTransport(ProviderTransport):
         payload: dict[str, Any] = {
             "model": self.model_name,
             "messages": self._to_openai_messages(messages, system),
-            "max_tokens": self.max_tokens,
         }
+        # Don't send max_tokens to Ollama — it manages limits internally
+        # via num_ctx. Sending max_tokens causes gemma4 to truncate mid-
+        # response before completing multi-step tool chains.
+        is_ollama = "localhost" in self.api_base or "127.0.0.1" in self.api_base
+        if not is_ollama and self.max_tokens:
+            payload["max_tokens"] = self.max_tokens
         if tools:
             payload["tools"] = self._to_openai_tools(tools)
         if stream:
