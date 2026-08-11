@@ -164,7 +164,7 @@ hermclaw chat    # should start without errors
 
 ---
 
-## 16. 🔔 Notifications:(NOT READY YET...)
+## 16. 🔔 Notifications
 
 | # | Test | Prompt | Expected |
 |---|------|--------|----------|
@@ -192,7 +192,7 @@ hermclaw chat    # should start without errors
 
 ---
 
-## 19. 🐾 Virtual Pet:(Not finished...)
+## 19. 🐾 Virtual Pet
 
 | # | Test | Prompt | Expected |
 |---|------|--------|----------|
