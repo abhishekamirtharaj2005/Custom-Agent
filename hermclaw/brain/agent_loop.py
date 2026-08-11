@@ -170,10 +170,14 @@ _KEYWORD_TOOLS: dict[str, list[str]] = {
     "cron": ["scheduler"],
     "timer": ["scheduler"],
     "alarm": ["scheduler", "notify"],
-    "speak": ["tts"],
+    "speak": ["tts", "transcribe"],
     "say": ["tts"],
-    "voice": ["tts"],
+    "voice": ["tts", "transcribe"],
     "read aloud": ["tts"],
+    "transcrib": ["transcribe"],
+    "audio": ["transcribe", "tts"],
+    "whisper": ["transcribe"],
+    "speech": ["tts", "transcribe"],
     "clipboard": ["clipboard"],
     "copy": ["clipboard"],
     "paste": ["clipboard"],
@@ -192,6 +196,9 @@ _KEYWORD_TOOLS: dict[str, list[str]] = {
     "delegate": ["delegate"],
     "learn": ["learning_graph"],
     "history": ["session_search"],
+    "patch": ["patch"],
+    "diff": ["patch"],
+    "apply": ["patch"],
 }
 
 # Maximum total tools to send to the model

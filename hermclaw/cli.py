@@ -868,6 +868,27 @@ def setup_command() -> None:
             raise typer.Exit(1)
 
 
+@app.command("mcp-server")
+def mcp_server_command(
+    ctx: typer.Context,
+) -> None:
+    """Start an MCP server exposing Hermclaw tools via stdio.
+
+    Connect from VS Code, Claude Desktop, or any MCP client.
+    """
+    from hermclaw.body.mcp_server import run_mcp_stdio
+
+    async def _run_mcp() -> None:
+        config = _load_config(ctx.obj["config_path"])
+        runtime = await build_agent_runtime(ctx.obj["profile"], config)
+        try:
+            await run_mcp_stdio(runtime.tool_dispatcher)
+        finally:
+            await runtime.aclose()
+
+    _run(_run_mcp())
+
+
 def main_entrypoint() -> None:
     app()
 

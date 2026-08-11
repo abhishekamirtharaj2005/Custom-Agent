@@ -50,6 +50,11 @@ class WebSearchTool(ToolABC):
         query = args["query"]
         num = min(args.get("num_results", 5), 10)
 
+        # Backend 0: Brave Search API (requires BRAVE_API_KEY)
+        result = await self._try_brave(query, num)
+        if result:
+            return result
+
         # Backend 1: ddgs library
         result = await self._try_ddgs(query, num)
         if result:
@@ -66,6 +71,40 @@ class WebSearchTool(ToolABC):
             return result
 
         return ToolResult(ok=True, output="No search results found. Try rephrasing your query or using url_read to fetch a specific URL.")
+
+    async def _try_brave(self, query: str, num: int) -> Optional[ToolResult]:
+        """Try Brave Search API (requires BRAVE_API_KEY env var)."""
+        import os
+        api_key = os.environ.get("BRAVE_API_KEY")
+        if not api_key:
+            return None
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.get(
+                    "https://api.search.brave.com/res/v1/web/search",
+                    params={"q": query, "count": num},
+                    headers={
+                        "Accept": "application/json",
+                        "Accept-Encoding": "gzip",
+                        "X-Subscription-Token": api_key,
+                    },
+                )
+                resp.raise_for_status()
+                data = resp.json()
+
+            results = []
+            for i, r in enumerate(data.get("web", {}).get("results", [])[:num], 1):
+                title = r.get("title", "No title")
+                url = r.get("url", "")
+                snippet = r.get("description", "No description")
+                results.append(f"{i}. **{title}**\n   URL: {url}\n   {snippet}")
+
+            if not results:
+                return None
+            return ToolResult(ok=True, output="\n\n".join(results))
+        except Exception as exc:
+            logger.debug("web_search.brave_failed", error=str(exc)[:100])
+            return None
 
     async def _try_ddgs(self, query: str, num: int) -> Optional[ToolResult]:
         """Try the ddgs library (new name for duckduckgo-search)."""

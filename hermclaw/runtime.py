@@ -47,7 +47,8 @@ from hermclaw.tools.scheduler_tool import SchedulerTool
 from hermclaw.tools.shell import ShellTool
 from hermclaw.tools.system_info import SystemInfoTool
 from hermclaw.tools.task_tools import KanbanTool, TodoTool
-from hermclaw.tools.tts_tool import TTSTool
+from hermclaw.tools.tts_tool import TTSTool, TranscriptionTool
+from hermclaw.tools.patch_tool import PatchTool
 from hermclaw.tools.virtual_pet import VirtualPetTool
 from hermclaw.tools.web_tools import UrlReadTool, WebSearchTool
 
@@ -156,8 +157,12 @@ async def build_agent_runtime(
     # Scheduler -- recurring tasks and cron
     dispatcher.register(SchedulerTool())
 
-    # Voice -- TTS
+    # Voice -- TTS & transcription
     dispatcher.register(TTSTool())
+    dispatcher.register(TranscriptionTool())
+
+    # Patch/diff tool
+    dispatcher.register(PatchTool(filesystem_scope=scope))
 
     # Git checkpoint management
     dispatcher.register(GitTool())

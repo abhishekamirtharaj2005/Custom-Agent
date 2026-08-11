@@ -56,4 +56,15 @@ def build_transport(model_config) -> ProviderTransport:  # ModelConfig, kept unt
             ) from exc
         return BedrockTransport(model_name=model_config.model_name)
 
+    if provider == "gemini":
+        api_key = resolve_env_ref(model_config.api_key_env)
+        if not api_key:
+            raise MissingCredentialsError(
+                f"No API key found for provider 'gemini'. "
+                f"Set the {model_config.api_key_env or 'GOOGLE_API_KEY'} environment variable."
+            )
+        from hermclaw.brain.transports.gemini import GeminiTransport
+
+        return GeminiTransport(api_key=api_key, model_name=model_config.model_name)
+
     raise TransportError(f"Unknown provider: {provider!r}")
