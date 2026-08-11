@@ -49,6 +49,10 @@ from hermclaw.tools.system_info import SystemInfoTool
 from hermclaw.tools.task_tools import KanbanTool, TodoTool
 from hermclaw.tools.tts_tool import TTSTool, TranscriptionTool
 from hermclaw.tools.patch_tool import PatchTool
+from hermclaw.tools.code_exec import CodeSandboxTool, ProcessManagerTool, ComputerUseTool
+from hermclaw.tools.media_extra import (
+    VideoGenerateTool, ElevenLabsTTS, ExaSearchTool, TavilySearchTool,
+)
 from hermclaw.tools.virtual_pet import VirtualPetTool
 from hermclaw.tools.web_tools import UrlReadTool, WebSearchTool
 
@@ -177,6 +181,19 @@ async def build_agent_runtime(
     # Fun / gamification
     dispatcher.register(VirtualPetTool())
     dispatcher.register(AchievementsTool())
+
+    # Code sandbox & process management
+    dispatcher.register(CodeSandboxTool())
+    dispatcher.register(ProcessManagerTool())
+    dispatcher.register(ComputerUseTool())
+
+    # Video & additional media
+    dispatcher.register(VideoGenerateTool())
+    dispatcher.register(ElevenLabsTTS())
+
+    # Additional search providers
+    dispatcher.register(ExaSearchTool())
+    dispatcher.register(TavilySearchTool())
 
     # Session search -- the agent's episodic recall tool.
     dispatcher.register(SessionSearchTool(memory_store))
