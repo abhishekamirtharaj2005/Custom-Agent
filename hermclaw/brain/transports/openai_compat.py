@@ -29,7 +29,7 @@ from hermclaw.tools.base import ToolSpec
 
 logger = structlog.get_logger(__name__)
 
-_RETRYABLE_STATUS = {408, 409, 429, 500, 502, 503, 504}
+_RETRYABLE_STATUS = {400, 408, 409, 429, 500, 502, 503, 504}
 
 
 class ChatCompletionsTransport(ProviderTransport):
@@ -103,6 +103,12 @@ class ChatCompletionsTransport(ProviderTransport):
 
     @staticmethod
     def _parse_response(data: dict[str, Any]) -> AgentResponse:
+        # Ollama sometimes returns {"error": "..."} with HTTP 200
+        if "error" in data and "choices" not in data:
+            logger.warning("transport.ollama_error_in_200", error=data["error"])
+            return AgentResponse(text="", tool_calls=[], stop_reason="error",
+                                 usage=Usage(), raw=data)
+
         choice = data["choices"][0]
         message = choice["message"]
         text = message.get("content") or ""
