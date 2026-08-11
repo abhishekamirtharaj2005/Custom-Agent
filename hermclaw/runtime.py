@@ -130,9 +130,6 @@ async def build_agent_runtime(
     # Browser automation (Playwright -- lazy-loads, no hard dep)
     dispatcher.register(BrowserTool())
 
-    # Code execution tool
-    dispatcher.register(CodeSandboxTool())
-
     # Media tools -- image generation and vision
     dispatcher.register(ImageGenerateTool())
     dispatcher.register(VisionTool())
@@ -166,7 +163,7 @@ async def build_agent_runtime(
     dispatcher.register(TranscriptionTool())
 
     # Patch/diff tool
-    dispatcher.register(PatchTool(filesystem_scope=scope))
+    dispatcher.register(PatchTool(filesystem_scope=workspace))
 
     # Git checkpoint management
     dispatcher.register(GitTool())
