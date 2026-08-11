@@ -121,8 +121,7 @@ def approx_token_count(messages: list[dict[str, Any]], system: str) -> int:
 # ---------------------------------------------------------------------------
 
 _CORE_TOOLS = {
-    "shell", "list_dir", "file_read", "file_write", "system_info",
-    "web_search", "code_exec", "memory",
+    "shell", "file_read", "file_write", "web_search",
 }
 
 _KEYWORD_TOOLS: dict[str, list[str]] = {
@@ -130,6 +129,19 @@ _KEYWORD_TOOLS: dict[str, list[str]] = {
     "file": ["file_edit", "grep_search", "list_dir"],
     "folder": ["list_dir"],
     "directory": ["list_dir"],
+    "list": ["list_dir"],
+    "system": ["system_info"],
+    "cpu": ["system_info"],
+    "ram": ["system_info"],
+    "disk": ["system_info"],
+    "code": ["code_exec"],
+    "python": ["code_exec"],
+    "execute": ["code_exec"],
+    "run": ["code_exec"],
+    "remember": ["memory", "session_search"],
+    "recall": ["memory", "session_search"],
+    "forget": ["memory"],
+    "fact": ["memory"],
     "search": ["grep_search", "web_search", "url_read"],
     "grep": ["grep_search"],
     "edit": ["file_edit"],
@@ -180,12 +192,10 @@ _KEYWORD_TOOLS: dict[str, list[str]] = {
     "delegate": ["delegate"],
     "learn": ["learning_graph"],
     "history": ["session_search"],
-    "remember": ["memory", "session_search"],
-    "recall": ["memory", "session_search"],
 }
 
 # Maximum total tools to send to the model
-_MAX_TOOLS = 12
+_MAX_TOOLS = 8
 
 
 def select_tools_for_query(
