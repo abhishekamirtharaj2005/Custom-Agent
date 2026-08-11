@@ -1,0 +1,11 @@
+{
+  "name": "Clawbert",
+  "species": "Hermit Crab",
+  "stats": {
+    "hunger": 50,
+    "happiness": 80,
+    "shell_condition": "Shiny"
+  },
+  "last_fed": "None",
+  "last_played_with": "None"
+}

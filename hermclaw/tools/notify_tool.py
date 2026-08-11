@@ -1,19 +1,22 @@
 """Notification tool: send system notifications and alerts.
 
 Supports:
-- Windows toast notifications
+- Windows toast notifications (via WinForms NotifyIcon)
 - macOS notification center
 - Linux desktop notifications (notify-send)
-- Cross-platform terminal bell
 """
 
 from __future__ import annotations
 
 import platform
 import subprocess
+from pathlib import Path
 from typing import Any
 
 from hermclaw.tools.base import ToolABC, ToolResult, ToolSpec
+
+# Path to the PowerShell notification helper script
+_NOTIFY_PS1 = Path(__file__).parent / "notify.ps1"
 
 
 class NotifyTool(ToolABC):
@@ -53,35 +56,20 @@ class NotifyTool(ToolABC):
         system = platform.system()
         try:
             if system == "Windows":
-                # Use PowerShell toast notification
-                ps_script = f"""
-[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
-[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
-$template = @"
-<toast>
-  <visual>
-    <binding template="ToastGeneric">
-      <text>{title}</text>
-      <text>{message}</text>
-    </binding>
-  </visual>
-</toast>
-"@
-$xml = New-Object Windows.Data.Xml.Dom.XmlDocument
-$xml.LoadXml($template)
-$toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
-[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("Hermclaw").Show($toast)
-"""
                 result = subprocess.run(
-                    ["powershell", "-Command", ps_script],
-                    capture_output=True, text=True, timeout=10,
+                    [
+                        "powershell", "-ExecutionPolicy", "Bypass",
+                        "-File", str(_NOTIFY_PS1),
+                        title, message,
+                    ],
+                    capture_output=True, text=True, timeout=15,
                 )
                 if result.returncode != 0:
-                    # Fallback to simple msg
-                    subprocess.run(
-                        ["powershell", "-Command", f"Write-Host '{title}: {message}'"],
-                        timeout=5,
+                    return ToolResult(
+                        ok=False, output="",
+                        error=f"Notification failed: {result.stderr.strip()}"
                     )
+
             elif system == "Darwin":
                 subprocess.run(
                     ["osascript", "-e", f'display notification "{message}" with title "{title}"'],
@@ -96,3 +84,4 @@ $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
             return ToolResult(ok=True, output=f"Notification sent: {title} - {message}")
         except Exception as exc:
             return ToolResult(ok=False, output="", error=f"Notification failed: {exc}")
+

@@ -164,7 +164,7 @@ hermclaw chat    # should start without errors
 
 ---
 
-## 16. 🔔 Notifications
+## 16. 🔔 Notifications:(NOT READY YET...)
 
 | # | Test | Prompt | Expected |
 |---|------|--------|----------|
@@ -173,7 +173,7 @@ hermclaw chat    # should start without errors
 
 ---
 
-## 17. ⏰ Scheduler
+## 17. ⏰ Scheduler:(Working,Need to re exicute...)
 
 | # | Test | Prompt | Expected |
 |---|------|--------|----------|
@@ -192,7 +192,7 @@ hermclaw chat    # should start without errors
 
 ---
 
-## 19. 🐾 Virtual Pet
+## 19. 🐾 Virtual Pet:(Not finished...)
 
 | # | Test | Prompt | Expected |
 |---|------|--------|----------|
@@ -211,12 +211,12 @@ hermclaw chat    # should start without errors
 
 ---
 
-## 21. 📄 PDF (if installed)
+## 21. 📄 PDF (if installed):(Not Redy...)
 
 | # | Test | Prompt | Expected |
 |---|------|--------|----------|
-| 21.1 | Read PDF | `read the contents of [path-to-any-pdf-file]` | PDF text extracted |
-| 21.2 | Summarize PDF | `summarize [path-to-any-pdf-file]` | Summary of PDF |
+| 21.1 | Read PDF | `read the contents of [C:\Users\giant\Downloads\base.pdf]` | PDF text extracted |
+| 21.2 | Summarize PDF | `summarize [C:\Users\giant\Downloads\base.pdf]` | Summary of PDF |
 
 > Skip if no PDF files available.
 
@@ -227,7 +227,7 @@ hermclaw chat    # should start without errors
 | # | Test | Prompt | Expected |
 |---|------|--------|----------|
 | 22.1 | System health | Run in terminal: `hermclaw doctor` | Health report |
-| 22.2 | JSON output | Run in terminal: `hermclaw doctor --json` | Machine-readable JSON |
+| 22.2 | JSON output | Run in terminal: `hermclaw doctor` | Machine-readable JSON |
 
 ---
 
