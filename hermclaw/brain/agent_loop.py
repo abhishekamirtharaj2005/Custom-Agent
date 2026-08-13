@@ -226,6 +226,15 @@ _KEYWORD_TOOLS: dict[str, list[str]] = {
     "lights": ["home_assistant"],
     "thermostat": ["home_assistant"],
     "home assistant": ["home_assistant"],
+    "model": ["model_catalog"],
+    "models": ["model_catalog"],
+    "switch model": ["model_catalog"],
+    "pricing": ["model_catalog"],
+    "cost": ["model_catalog"],
+    "token usage": ["model_catalog"],
+    "context window": ["model_catalog"],
+    "what model": ["model_catalog"],
+    "which model": ["model_catalog"],
 }
 
 # Maximum total tools to send to the model

@@ -55,6 +55,7 @@ from hermclaw.tools.media_extra import (
 from hermclaw.tools.virtual_pet import VirtualPetTool
 from hermclaw.tools.web_tools import UrlReadTool, WebSearchTool
 from hermclaw.tools.protocol_tools import TwitterSearchTool, SpotifyTool, HomeAssistantTool
+from hermclaw.tools.model_catalog_tool import ModelCatalogTool
 
 logger = structlog.get_logger(__name__)
 
@@ -199,6 +200,11 @@ async def build_agent_runtime(
 
     # Session search -- the agent's episodic recall tool.
     dispatcher.register(SessionSearchTool(memory_store))
+
+    # Model catalog -- lets the agent list/inspect models and report costs
+    model_tool = ModelCatalogTool()
+    model_tool.set_current_model(config.brain.model.model_name)
+    dispatcher.register(model_tool)
 
     # Load plugins and register their tools
     try:
