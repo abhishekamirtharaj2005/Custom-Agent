@@ -539,6 +539,27 @@ class HermclawAgent:
                 if resp_candidate.text.strip() or resp_candidate.tool_calls:
                     response = resp_candidate
                     break
+
+                # Don't retry on max_tokens — the context is too full, retrying won't help
+                if resp_candidate.stop_reason == "max_tokens":
+                    logger.warning("agent.max_tokens_hit", iteration=iteration)
+                    # If we have tool results from previous iterations, summarize them
+                    if tool_records:
+                        summary_parts = []
+                        for rec in tool_records:
+                            status = "✓" if rec.result.ok else "✗"
+                            output = rec.result.output[:200] if rec.result.output else (rec.result.error or "")[:200]
+                            summary_parts.append(f"{status} {rec.name}: {output}")
+                        response = resp_candidate
+                        response = dataclasses.replace(response,
+                            text="Here are the results from the tools I used:\n\n" + "\n".join(summary_parts),
+                            stop_reason="end_turn")
+                    else:
+                        response = dataclasses.replace(resp_candidate,
+                            text="I ran into a context length limit. Could you try a shorter request?",
+                            stop_reason="end_turn")
+                    break
+
                 logger.warning("agent.empty_response_retry", retry=retry + 1,
                                iteration=iteration, stop_reason=resp_candidate.stop_reason)
 
