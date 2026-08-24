@@ -73,7 +73,7 @@ brain:
                                       #   api_key_env: "OPENAI_COMPAT_API_KEY"
                                       #   api_base_env: "OPENAI_COMPAT_API_BASE"
   memory:
-    compression_threshold: 0.5       # fraction of context window that triggers compression
+    compression_threshold: 0.3       # fraction of context window that triggers compression
     keep_recent_exchanges: 2
     memory_char_limit: 2200
     user_char_limit: 1375
