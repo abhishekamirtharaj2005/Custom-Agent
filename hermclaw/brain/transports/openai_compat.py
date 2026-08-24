@@ -226,7 +226,11 @@ class ChatCompletionsTransport(ProviderTransport):
         # via num_ctx. Sending max_tokens causes gemma4 to truncate mid-
         # response before completing multi-step tool chains.
         is_ollama = "localhost" in self.api_base or "127.0.0.1" in self.api_base
-        if not is_ollama and self.max_tokens:
+        if is_ollama:
+            # Set a large context window for Ollama — the default (2048-4096)
+            # is far too small for agent workloads with tools and history.
+            payload["options"] = {"num_ctx": 131072}
+        elif self.max_tokens:
             payload["max_tokens"] = self.max_tokens
         if tools:
             payload["tools"] = self._to_openai_tools(tools)
