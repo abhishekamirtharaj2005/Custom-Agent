@@ -227,9 +227,9 @@ class ChatCompletionsTransport(ProviderTransport):
         # response before completing multi-step tool chains.
         is_ollama = "localhost" in self.api_base or "127.0.0.1" in self.api_base
         if is_ollama:
-            # Set a large context window for Ollama — the default (2048-4096)
-            # is far too small for agent workloads with tools and history.
-            payload["options"] = {"num_ctx": 131072}
+            # num_ctx:     context window (input + output). Default is 2048-4096, way too small.
+            # num_predict: max output tokens. Default varies but often tiny (-1 = unlimited).
+            payload["options"] = {"num_ctx": 131072, "num_predict": -1}
         elif self.max_tokens:
             payload["max_tokens"] = self.max_tokens
         if tools:
