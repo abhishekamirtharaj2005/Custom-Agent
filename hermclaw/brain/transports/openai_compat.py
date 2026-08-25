@@ -227,9 +227,12 @@ class ChatCompletionsTransport(ProviderTransport):
         # response before completing multi-step tool chains.
         is_ollama = "localhost" in self.api_base or "127.0.0.1" in self.api_base
         if is_ollama:
-            # num_ctx:     context window (input + output). Default is 2048-4096, way too small.
-            # num_predict: max output tokens. Default varies but often tiny (-1 = unlimited).
-            payload["options"] = {"num_ctx": 131072, "num_predict": -1}
+            # Ollama pre-allocates the FULL num_ctx window regardless of input size.
+            # 131072 causes extreme slowness/timeouts on consumer hardware.
+            # 32768 (32K) is enough for agent workloads and stays fast.
+            # num_predict=-1 means unlimited output tokens.
+            payload["max_tokens"] = 16384
+            payload["options"] = {"num_ctx": 32768, "num_predict": -1}
         elif self.max_tokens:
             payload["max_tokens"] = self.max_tokens
         if tools:
