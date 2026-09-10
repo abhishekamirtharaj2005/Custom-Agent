@@ -24,7 +24,7 @@ from hermclaw.tools.base import ToolSpec
 
 logger = structlog.get_logger(__name__)
 
-MIN_OCCURRENCES_FOR_SKILL = 3
+MIN_OCCURRENCES_FOR_SKILL = 2
 
 SUBMIT_REFLECTION_TOOL = ToolSpec(
     name="submit_reflection",
@@ -122,16 +122,38 @@ def _parse_distillation(response: AgentResponse) -> ReflectionDistillation:
         return ReflectionDistillation()
 
 
-def _build_transcript(sessions: list[Any], sessions_messages: list[list[Any]]) -> str:
+def _build_transcript(sessions: list[Any], sessions_messages: list[list[Any]], max_chars: int = 8000) -> str:
     parts = []
+    total = 0
     for session, rows in zip(sessions, sessions_messages):
-        parts.append(f"=== Session {session.id} ({session.started_at}) ===")
+        header = f"=== Session {session.id} ({session.started_at}) ==="
+        parts.append(header)
+        total += len(header)
         for row in rows:
             if row.role == "tool":
                 continue  # raw tool-result JSON blobs add noise, not signal, to distillation
             content_preview = row.content[:500] if row.content else ""
-            parts.append(f"{row.role}: {content_preview}")
+            line = f"{row.role}: {content_preview}"
+            total += len(line)
+            if total > max_chars:
+                parts.append("... [transcript truncated for context limits]")
+                return "\n".join(parts)
+            parts.append(line)
     return "\n".join(parts)
+
+
+_REFLECTION_JSON_SYSTEM = (
+    "You are analyzing conversation sessions to find patterns. "
+    "Reply with ONLY a JSON object (no extra text) with these keys:\n"
+    '- "facts": array of strings - general durable facts worth remembering\n'
+    '- "user_facts": array of strings - facts about the user (preferences, context)\n'
+    '- "repeated_procedures": array of objects, each with:\n'
+    '    - "description": string - what the procedure does\n'
+    '    - "occurrences": integer - how many times it appeared\n'
+    '    - "steps": array of strings - the steps involved\n'
+    "Include any procedure that appears 2+ times, even with different wording. "
+    "If nothing qualifies, use empty arrays. Reply with ONLY the JSON."
+)
 
 
 async def reflect(
@@ -152,9 +174,23 @@ async def reflect(
     ]
     transcript = _build_transcript(ordered, sessions_messages)
 
+    # Attempt 1: Use the submit_reflection tool (works well with large models)
     message = {"role": "user", "content": transcript + "\n\nDistill the sessions above via submit_reflection."}
     response = await transport.send([message], tools=[SUBMIT_REFLECTION_TOOL], system=_REFLECTION_SYSTEM)
     distillation = _parse_distillation(response)
+
+    # Attempt 2: If tool calling failed (common with small models like gemma4),
+    # retry WITHOUT tools, asking for plain JSON output instead
+    if not distillation.facts and not distillation.user_facts and not distillation.repeated_procedures:
+        logger.info("reflection.tool_call_failed_retrying_json", text_preview=response.text[:200])
+        json_message = {"role": "user", "content": transcript + "\n\nAnalyze the sessions above and return the JSON."}
+        try:
+            json_response = await transport.send([json_message], tools=[], system=_REFLECTION_JSON_SYSTEM)
+            distillation = _parse_distillation(json_response)
+            if distillation.facts or distillation.user_facts or distillation.repeated_procedures:
+                logger.info("reflection.json_fallback_succeeded")
+        except Exception as exc:
+            logger.warning("reflection.json_fallback_failed", error=str(exc))
 
     if distillation.facts:
         identity_files.append_memory_facts(distillation.facts)
@@ -180,3 +216,4 @@ async def reflect(
         sessions_reviewed=len(sessions), facts_saved=distillation.facts, user_facts_saved=distillation.user_facts,
         procedures_handed_to_skill_growth=handed, draft_skills_created=draft_paths,
     )
+

@@ -889,10 +889,48 @@ def mcp_server_command(
     _run(_run_mcp())
 
 
+@app.command("dashboard")
+def dashboard_command(
+    ctx: typer.Context,
+    host: str = typer.Option("127.0.0.1", "--host", help="Host to bind the web dashboard to"),
+    port: int = typer.Option(18790, "--port", help="Port to bind the web dashboard to"),
+    open_browser: bool = typer.Option(True, "--open-browser/--no-open-browser", help="Automatically open browser"),
+) -> None:
+    """Start the Hermclaw Unified Web Dashboard."""
+    import uvicorn
+    import webbrowser
+    from hermclaw.dashboard.server import create_dashboard_app
+
+    config_path = ctx.obj["config_path"]
+    profile = ctx.obj["profile"]
+
+    app_instance = create_dashboard_app(config_path=config_path, profile=profile)
+
+    url = f"http://{host}:{port}"
+    console.print(f"\n[bold cyan]🦞 HermClaw Web Dashboard[/bold cyan] is launching!")
+    console.print(f"URL: [green]{url}[/green]")
+    console.print(f"Profile: [cyan]{profile}[/cyan]  |  Config: [dim]{config_path}[/dim]")
+    console.print("Press [bold red]Ctrl+C[/bold red] to stop.\n")
+
+    if open_browser:
+        import threading
+        def _open():
+            time.sleep(1.0)
+            try:
+                webbrowser.open(url)
+            except Exception:
+                pass
+        import time
+        threading.Thread(target=_open, daemon=True).start()
+
+    uvicorn.run(app_instance, host=host, port=port, log_level="warning")
+
+
 def main_entrypoint() -> None:
     app()
 
 
 if __name__ == "__main__":
     main_entrypoint()
+
 

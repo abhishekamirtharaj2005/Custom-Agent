@@ -87,7 +87,17 @@ ehthumbs.db
 *.tar.gz
 *.zip
 
+# Research papers & PDFs (large binaries)
+Lit_papars/
+Lit_papers/
+*.pdf
+
+# College presentation & report drafts (private)
+*.pptx
+HERMCLAW_COLLEGE_PROJECT_REPORT.md
+
 # Misc
 *.bak
 *.tmp
 *.temp
+

@@ -111,7 +111,7 @@ Help me create another Python FastAPI project: create a file called api.py with 
 
 ### Step 18: Trigger reflection
 ```
-Reflect on our conversation. What patterns or repeated procedures have you noticed?
+22
 ```
 
 ### Step 19: Check if a skill was auto-generated

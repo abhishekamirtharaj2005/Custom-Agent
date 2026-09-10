@@ -18,8 +18,10 @@ import structlog
 
 from hermclaw.brain.memory.store import MemoryStore, MessageRow
 from hermclaw.brain.profiles import IdentityFiles
+from hermclaw.brain.reflection import reflect as run_reflection
+from hermclaw.brain.skill_growth import SkillGrowthEngine
 from hermclaw.brain.transports.base import AgentResponse, ProviderTransport, ToolCallRequest, TransportError, Usage
-from hermclaw.config import ModelConfig
+from hermclaw.config import ModelConfig, ReflectionConfig
 from hermclaw.skills.registry import SkillRegistry
 from hermclaw.tools.base import ToolDispatcher, ToolResult
 
@@ -331,7 +333,10 @@ class HermclawAgent:
         self.compressor = compressor
         self.max_tool_iterations = max_tool_iterations
         self.vector_memory = vector_memory
+        self.skill_growth_engine: Optional[SkillGrowthEngine] = None
+        self.reflection_config: Optional[ReflectionConfig] = None
         self._turn_count = 0
+        self._turns_since_reflection = 0
 
     async def _send_with_fallback(
         self, messages: list[dict[str, Any]], tools: list[Any], system: str, stream: bool = False,
@@ -475,6 +480,63 @@ class HermclawAgent:
 
         except Exception as exc:
             logger.debug("agent.auto_save_failed", error=str(exc))
+
+    async def _auto_reflect(self, session_id: str, user_message: str) -> None:
+        """Run the reflection engine when triggered by keyword or turn count.
+        
+        This enables two paths for skill auto-generation:
+        1. Explicit: User says "reflect" in chat -> immediate reflection
+        2. Automatic: Every `trigger_every_n_turns` turns -> background reflection
+        
+        Both paths feed into SkillGrowthEngine.generate_draft_skill().
+        """
+        import asyncio
+
+        if not self.skill_growth_engine:
+            return
+
+        msg_lower = user_message.lower()
+        explicit_trigger = any(kw in msg_lower for kw in ("reflect", "reflection", "what patterns"))
+        
+        self._turns_since_reflection += 1
+        periodic_trigger = False
+        if self.reflection_config and self.reflection_config.enabled:
+            if self._turns_since_reflection >= self.reflection_config.trigger_every_n_turns:
+                periodic_trigger = True
+
+        if not explicit_trigger and not periodic_trigger:
+            return
+
+        # Give local model servers (Ollama) time to finish the previous
+        # response before sending the reflection request. Ollama can only
+        # handle one concurrent request per model.
+        await asyncio.sleep(3)
+
+        try:
+            result = await run_reflection(
+                profile=self.profile,
+                memory_store=self.memory_store,
+                identity_files=self.identity_files,
+                skill_growth_engine=self.skill_growth_engine,
+                transport=self.transport,
+                n_sessions=5,  # keep transcript small for local models
+            )
+            self._turns_since_reflection = 0
+            logger.info(
+                "agent.auto_reflect_completed",
+                trigger="explicit" if explicit_trigger else "periodic",
+                sessions_reviewed=result.sessions_reviewed,
+                facts_saved=len(result.facts_saved),
+                user_facts_saved=len(result.user_facts_saved),
+                procedures_found=len(result.procedures_handed_to_skill_growth),
+                drafts_created=len(result.draft_skills_created),
+            )
+            # Reload the skill registry so newly created skills are visible immediately
+            if result.draft_skills_created:
+                self.skill_registry.load()
+                logger.info("agent.skills_reloaded", new_skills=result.draft_skills_created)
+        except Exception as exc:
+            logger.warning("agent.auto_reflect_failed", error=str(exc))
 
     async def run_turn(self, session_id: str, user_message: str, stream: bool = False) -> AgentTurnResult:
         await self.memory_store.a_add_message(session_id, "user", user_message)
@@ -668,6 +730,9 @@ class HermclawAgent:
 
         # Auto-save: persist important facts from this turn to long-term memory
         await self._auto_save(session_id, user_message, final_text)
+
+        # Auto-reflect: run the reflection engine periodically or on-demand
+        await self._auto_reflect(session_id, user_message)
 
         return AgentTurnResult(
             session_id=session_id, text=final_text, tool_calls_made=tool_records,

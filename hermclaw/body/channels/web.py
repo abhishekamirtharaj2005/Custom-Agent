@@ -67,10 +67,21 @@ class WebChannel(ChannelAdapter):
         self._register_routes()
 
     def _register_routes(self) -> None:
-        @self.app.get("/")
-        async def index() -> str:  # type: ignore[unused-ignore]
-            from fastapi.responses import HTMLResponse
+        static_dir = Path(__file__).resolve().parent.parent.parent / "dashboard" / "static"
+        index_file = static_dir / "index.html"
 
+        if static_dir.exists():
+            from fastapi.staticfiles import StaticFiles
+            # Mount static assets if not already mounted
+            if not any(route.path == "/static" for route in self.app.routes):
+                self.app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+        @self.app.get("/")
+        async def index() -> Any:
+            if index_file.exists():
+                from fastapi.responses import FileResponse
+                return FileResponse(index_file)
+            from fastapi.responses import HTMLResponse
             return HTMLResponse(_WIDGET_HTML)
 
         @self.app.websocket("/ws")

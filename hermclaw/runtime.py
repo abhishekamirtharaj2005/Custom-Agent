@@ -247,6 +247,10 @@ async def build_agent_runtime(
         model_config=config.brain.model, fallbacks=fallbacks, compressor=compressor,
         vector_memory=vector_memory,
     )
+    # Wire skill growth & reflection into the agent loop so it can auto-generate
+    # skills from repeated procedures without requiring the CLI `hermclaw reflect`.
+    agent.skill_growth_engine = skill_growth_engine
+    agent.reflection_config = config.brain.reflection
 
     return AgentRuntime(
         profile=profile, paths=paths, memory_store=memory_store, identity_files=identity_files,
