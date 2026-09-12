@@ -118,6 +118,14 @@ def create_dashboard_app(
         allow_headers=["*"],
     )
 
+    @app.middleware("http")
+    async def add_no_cache_headers(request: Request, call_next):
+        response = await call_next(request)
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
+
     static_dir = Path(__file__).parent / "static"
 
     # ------------------------------------------------------------------
@@ -363,6 +371,13 @@ def create_dashboard_app(
         index_file = static_dir / "index.html"
         if not index_file.exists():
             return HTMLResponse("<h1>Hermclaw Dashboard: index.html not found</h1>", status_code=404)
-        return FileResponse(index_file)
+        return FileResponse(
+            index_file,
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
+        )
 
     return app

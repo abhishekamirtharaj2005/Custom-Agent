@@ -101,7 +101,13 @@ function switchTab(tabId) {
 
   // Trigger lazy data loading per tab
   if (tabId === 'overview') loadOverview();
-  else if (tabId === 'chat') loadSessionsList();
+  else if (tabId === 'chat') {
+    loadSessionsList();
+    fetch('/api/models')
+      .then(res => res.json())
+      .then(models => populateModelDropdown(models))
+      .catch(() => {});
+  }
   else if (tabId === 'skills') loadSkills();
   else if (tabId === 'graph') loadLearningGraph();
   else if (tabId === 'memory') loadMemoryFile(state.activeMemTab);
@@ -145,7 +151,10 @@ async function loadOverview() {
     const pillText = document.getElementById('ollama-status-text');
     if (data.model.ollama_online) {
       dot.className = 'pulse-indicator online';
-      pillText.textContent = `Ollama: ${data.model.available_models.length} Models`;
+      const localCount = Array.isArray(data.model.available_models)
+        ? data.model.available_models.filter(m => (typeof m === 'object' ? m.type !== 'cloud' : true)).length
+        : (data.model.available_models ? data.model.available_models.length : 0);
+      pillText.textContent = `Ollama: ${localCount} Models`;
     } else {
       dot.className = 'pulse-indicator offline';
       pillText.textContent = 'Ollama: Offline';
@@ -1549,7 +1558,7 @@ function populateModelDropdown(models, currentModel) {
   const modelSelect = document.getElementById('chat-model-select');
   if (!modelSelect) return;
 
-  if (!models || models.length === 0) {
+  if (!models || !Array.isArray(models) || models.length === 0) {
     modelSelect.innerHTML = '<option value="gemma4:12b">gemma4:12b [Local]</option>';
     return;
   }
@@ -1559,10 +1568,24 @@ function populateModelDropdown(models, currentModel) {
   const cloudByProvider = {};
 
   models.forEach(m => {
-    const id = typeof m === 'object' ? m.id : m;
-    const isCloud = typeof m === 'object' && m.type === 'cloud';
-    const provider = (typeof m === 'object' && m.provider) ? m.provider : 'other';
-    const label = (typeof m === 'object' && m.display_label) ? m.display_label : (isCloud ? `${id} [Cloud]` : `${id} [Local]`);
+    let id = '';
+    let label = '';
+    let isCloud = false;
+    let provider = 'other';
+
+    if (typeof m === 'string') {
+      id = m;
+      label = `${m} [Local]`;
+      isCloud = false;
+      provider = 'ollama';
+    } else if (typeof m === 'object' && m !== null) {
+      id = m.id || m.name || '';
+      isCloud = m.type === 'cloud';
+      provider = m.provider || (isCloud ? 'other' : 'ollama');
+      label = m.display_label || (isCloud ? `${id} [Cloud - ${provider}]` : `${id} [Local]`);
+    }
+
+    if (!id || typeof id !== 'string') return;
 
     if (!isCloud) {
       localModels.push({ id, label });
@@ -1576,7 +1599,7 @@ function populateModelDropdown(models, currentModel) {
   if (localModels.length > 0) {
     html += '<optgroup label="Local Models (Ollama)">';
     localModels.forEach(m => {
-      html += `<option value="${m.id}" ${m.id === currentVal ? 'selected' : ''}>${escapeHtml(m.label)}</option>`;
+      html += `<option value="${escapeHtml(m.id)}" ${m.id === currentVal ? 'selected' : ''}>${escapeHtml(m.label)}</option>`;
     });
     html += '</optgroup>';
   }
@@ -1592,12 +1615,16 @@ function populateModelDropdown(models, currentModel) {
 
   Object.keys(cloudByProvider).forEach(p => {
     const groupLabel = providerDisplayNames[p] || `Cloud Models (${p.toUpperCase()})`;
-    html += `<optgroup label="${groupLabel}">`;
+    html += `<optgroup label="${escapeHtml(groupLabel)}">`;
     cloudByProvider[p].forEach(m => {
-      html += `<option value="${m.id}" ${m.id === currentVal ? 'selected' : ''}>${escapeHtml(m.label)}</option>`;
+      html += `<option value="${escapeHtml(m.id)}" ${m.id === currentVal ? 'selected' : ''}>${escapeHtml(m.label)}</option>`;
     });
     html += '</optgroup>';
   });
+
+  if (!html) {
+    html = '<option value="gemma4:12b">gemma4:12b [Local]</option>';
+  }
 
   modelSelect.innerHTML = html;
 }
