@@ -286,4 +286,80 @@ async def test_send_message_transport_error_surfaced(tmp_path: Path, monkeypatch
     assert res["text"] != "(empty response)"
 
 
+def test_gemini_thought_signature_preservation_and_fallback():
+    """Test that GeminiTransport parses thoughtSignature and serializes it back to contents,
+    and falls back cleanly to descriptive text if thoughtSignature is missing."""
+    from hermclaw.brain.transports.gemini import GeminiTransport
+    from hermclaw.brain.agent_loop import tool_use_block, rows_to_canonical_messages
+    from hermclaw.brain.transports.base import ToolCallRequest
+    from hermclaw.brain.memory.store import MessageRow
+    from datetime import datetime, timezone
+
+    # 1. Parsing response with thoughtSignature
+    transport = GeminiTransport(api_key="dummy_key", model_name="gemini-3.8-flash")
+    raw_response = {
+        "candidates": [{
+            "content": {
+                "parts": [{
+                    "functionCall": {
+                        "name": "app_launcher",
+                        "args": {"app_name": "notepad"},
+                    },
+                    "thoughtSignature": "test_cryptographic_signature_abc123"
+                }],
+                "role": "model"
+            },
+            "finishReason": "STOP"
+        }]
+    }
+    parsed = transport._parse_response(raw_response)
+    assert len(parsed.tool_calls) == 1
+    tc = parsed.tool_calls[0]
+    assert tc.name == "app_launcher"
+    assert tc.thought_signature == "test_cryptographic_signature_abc123"
+
+    # 2. tool_use_block preserves thought_signature
+    tu = tool_use_block(tc)
+    assert tu["type"] == "tool_use"
+    assert tu["thought_signature"] == "test_cryptographic_signature_abc123"
+
+    # 3. Serializing back to Gemini contents format with thoughtSignature
+    messages_with_sig = [
+        {"role": "user", "content": "open notepad"},
+        {"role": "assistant", "content": [tu]},
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "app_launcher", "content": "Notepad opened"}]}
+    ]
+    contents, _ = transport._to_gemini_contents(messages_with_sig, "")
+    assert len(contents) == 3
+    model_turn = contents[1]
+    assert model_turn["role"] == "model"
+    assert "thoughtSignature" in model_turn["parts"][0]
+    assert model_turn["parts"][0]["thoughtSignature"] == "test_cryptographic_signature_abc123"
+    assert model_turn["parts"][0]["functionCall"]["name"] == "app_launcher"
+    
+    user_tool_resp = contents[2]
+    assert user_tool_resp["role"] == "user"
+    assert "functionResponse" in user_tool_resp["parts"][0]
+    assert user_tool_resp["parts"][0]["functionResponse"]["name"] == "app_launcher"
+
+    # 4. Fallback for older/unsigned tool calls: downgrade to text to avoid Gemini API 400
+    tc_unsigned = ToolCallRequest(id="app_launcher", name="app_launcher", arguments={"app_name": "notepad"})
+    tu_unsigned = tool_use_block(tc_unsigned)
+    assert "thought_signature" not in tu_unsigned
+
+    messages_unsigned = [
+        {"role": "user", "content": "open notepad"},
+        {"role": "assistant", "content": [tu_unsigned]},
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "app_launcher", "content": "Notepad opened"}]}
+    ]
+    contents_unsigned, _ = transport._to_gemini_contents(messages_unsigned, "")
+    assert len(contents_unsigned) == 3
+    # Model turn should be text, not functionCall without thoughtSignature
+    assert "text" in contents_unsigned[1]["parts"][0]
+    assert "app_launcher" in contents_unsigned[1]["parts"][0]["text"]
+    # User turn should be text, not unmatched functionResponse
+    assert "text" in contents_unsigned[2]["parts"][0]
+    assert "Notepad opened" in contents_unsigned[2]["parts"][0]["text"]
+
+
 

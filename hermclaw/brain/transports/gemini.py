@@ -66,6 +66,8 @@ class GeminiTransport(ProviderTransport):
             system_instruction = {"parts": [{"text": system}]}
 
         contents: list[dict[str, Any]] = []
+        signed_tool_calls: set[str] = set()
+
         for msg in messages:
             role = msg.get("role", "user")
             content = msg.get("content", "")
@@ -92,19 +94,40 @@ class GeminiTransport(ProviderTransport):
                         if btype == "text":
                             parts.append({"text": block.get("text", "")})
                         elif btype == "tool_use":
-                            parts.append({
-                                "functionCall": {
-                                    "name": block.get("name", ""),
-                                    "args": block.get("input", {}),
-                                }
-                            })
+                            tool_name = block.get("name", "")
+                            tool_input = block.get("input", {})
+                            sig = block.get("thought_signature") or block.get("thoughtSignature")
+                            if sig:
+                                signed_tool_calls.add(tool_name)
+                                if block.get("id"):
+                                    signed_tool_calls.add(block["id"])
+                                parts.append({
+                                    "functionCall": {
+                                        "name": tool_name,
+                                        "args": tool_input,
+                                    },
+                                    "thoughtSignature": sig,
+                                })
+                            else:
+                                # When thought_signature is missing (e.g. from history or another provider),
+                                # Gemini 400s if sent as functionCall. Fallback to descriptive text.
+                                parts.append({
+                                    "text": f"[Action: Called tool {tool_name} with arguments {json.dumps(tool_input)}]"
+                                })
                         elif btype == "tool_result":
-                            parts.append({
-                                "functionResponse": {
-                                    "name": block.get("tool_use_id", ""),
-                                    "response": {"content": block.get("content", "")},
-                                }
-                            })
+                            tool_id = block.get("tool_use_id", "")
+                            res_content = block.get("content", "")
+                            if tool_id in signed_tool_calls:
+                                parts.append({
+                                    "functionResponse": {
+                                        "name": tool_id,
+                                        "response": {"content": res_content},
+                                    }
+                                })
+                            else:
+                                parts.append({
+                                    "text": f"[Result from {tool_id}: {res_content}]"
+                                })
                         else:
                             parts.append({"text": json.dumps(block)})
                     else:
@@ -155,10 +178,17 @@ class GeminiTransport(ProviderTransport):
                 text_parts.append(part["text"])
             elif "functionCall" in part:
                 fc = part["functionCall"]
+                sig = (
+                    part.get("thoughtSignature")
+                    or part.get("thought_signature")
+                    or fc.get("thoughtSignature")
+                    or fc.get("thought_signature")
+                )
                 tool_calls.append(ToolCallRequest(
                     id=fc.get("name", ""),  # Gemini uses name as ID
                     name=fc.get("name", ""),
                     arguments=fc.get("args", {}),
+                    thought_signature=sig,
                 ))
 
         finish_reason = candidate.get("finishReason", "STOP")

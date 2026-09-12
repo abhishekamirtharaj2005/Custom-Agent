@@ -18,6 +18,7 @@ class ToolCallRequest:
     id: str
     name: str
     arguments: dict[str, Any]
+    thought_signature: Optional[str] = None
 
 
 @dataclasses.dataclass

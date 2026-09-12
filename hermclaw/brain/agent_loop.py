@@ -42,7 +42,11 @@ def text_block(text: str) -> dict[str, Any]:
 
 
 def tool_use_block(tc: ToolCallRequest) -> dict[str, Any]:
-    return {"type": "tool_use", "id": tc.id, "name": tc.name, "input": tc.arguments}
+    block = {"type": "tool_use", "id": tc.id, "name": tc.name, "input": tc.arguments}
+    sig = getattr(tc, "thought_signature", None)
+    if sig:
+        block["thought_signature"] = sig
+    return block
 
 
 def tool_result_block(tool_use_id: str, result: ToolResult) -> dict[str, Any]:
@@ -85,7 +89,11 @@ def rows_to_canonical_messages(rows: list[MessageRow]) -> list[dict[str, Any]]:
             if row.content:
                 blocks.append(text_block(row.content))
             for tc in row.tool_calls:
-                blocks.append({"type": "tool_use", "id": tc["id"], "name": tc["name"], "input": tc["arguments"]})
+                block = {"type": "tool_use", "id": tc["id"], "name": tc["name"], "input": tc["arguments"]}
+                sig = tc.get("thought_signature") or tc.get("thoughtSignature")
+                if sig:
+                    block["thought_signature"] = sig
+                blocks.append(block)
             messages.append({"role": "assistant", "content": blocks})
         else:
             messages.append({"role": row.role, "content": row.content})
