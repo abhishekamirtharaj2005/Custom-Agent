@@ -31,10 +31,13 @@ import httpx
 import psutil
 import structlog
 
+from hermclaw.brain.model_catalog import ModelCatalog, ModelInfo
 from hermclaw.brain.profiles import ProfileManager
 from hermclaw.brain.reflection import reflect as run_reflection
+from hermclaw.brain.transports import MissingCredentialsError, build_transport
 from hermclaw.config import (
     HermclawConfig,
+    ModelConfig,
     default_config_path,
     hermclaw_home,
     load_config,
@@ -49,6 +52,75 @@ from hermclaw.tools.task_tools import _KanbanDB
 from hermclaw.tools.virtual_pet import MOOD_EMOTES, PET_ART, VirtualPet
 
 logger = structlog.get_logger(__name__)
+
+CLOUD_PROVIDERS: list[dict[str, Any]] = [
+    {
+        "id": "openai",
+        "name": "OpenAI",
+        "env_var": "OPENAI_API_KEY",
+        "placeholder": "sk-proj-...",
+        "models": [
+            {"id": "gpt-4o", "name": "GPT-4o (Omni Flagship)", "context": "128k"},
+            {"id": "gpt-4o-mini", "name": "GPT-4o Mini (Fast & Cheap)", "context": "128k"},
+            {"id": "o1", "name": "o1 (Deep Reasoning)", "context": "200k"},
+            {"id": "o3-mini", "name": "o3-mini (STEM & Code)", "context": "200k"},
+            {"id": "gpt-4-turbo", "name": "GPT-4 Turbo", "context": "128k"},
+        ],
+    },
+    {
+        "id": "anthropic",
+        "name": "Anthropic Claude",
+        "env_var": "ANTHROPIC_API_KEY",
+        "placeholder": "sk-ant-api03-...",
+        "models": [
+            {"id": "claude-3-7-sonnet-latest", "name": "Claude 3.7 Sonnet (Hybrid Reasoning)", "context": "200k"},
+            {"id": "claude-3-5-sonnet-latest", "name": "Claude 3.5 Sonnet", "context": "200k"},
+            {"id": "claude-3-5-haiku-latest", "name": "Claude 3.5 Haiku (Ultra-Fast)", "context": "200k"},
+            {"id": "claude-sonnet-4-20250514", "name": "Claude Sonnet 4", "context": "200k"},
+        ],
+    },
+    {
+        "id": "gemini",
+        "name": "Google Gemini",
+        "env_var": "GEMINI_API_KEY",
+        "alt_env_var": "GOOGLE_API_KEY",
+        "placeholder": "AIzaSy...",
+        "models": [
+            {"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro (1M Context)", "context": "1M"},
+            {"id": "gemini-2.5-flash", "name": "Gemini 2.5 Flash", "context": "1M"},
+            {"id": "gemini-2.0-flash", "name": "Gemini 2.0 Flash", "context": "1M"},
+            {"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro", "context": "2M"},
+        ],
+    },
+    {
+        "id": "groq",
+        "name": "Groq",
+        "env_var": "GROQ_API_KEY",
+        "placeholder": "gsk_...",
+        "models": [
+            {"id": "llama-3.3-70b-versatile", "name": "Groq Llama 3.3 70B (High Speed)", "context": "128k"},
+        ],
+    },
+    {
+        "id": "deepseek",
+        "name": "DeepSeek",
+        "env_var": "DEEPSEEK_API_KEY",
+        "placeholder": "sk-...",
+        "models": [
+            {"id": "deepseek-chat", "name": "DeepSeek V3 (Chat & Coding)", "context": "64k"},
+            {"id": "deepseek-reasoner", "name": "DeepSeek R1 (Reasoner)", "context": "64k"},
+        ],
+    },
+    {
+        "id": "openrouter",
+        "name": "OpenRouter",
+        "env_var": "OPENROUTER_API_KEY",
+        "placeholder": "sk-or-v1-...",
+        "models": [
+            {"id": "openrouter/auto", "name": "OpenRouter Auto-Routing", "context": "128k"},
+        ],
+    },
+]
 
 
 class DashboardService:
@@ -120,6 +192,240 @@ class DashboardService:
             return False, [str(exc)]
 
     # ------------------------------------------------------------------
+    # Cloud LLM API Keys & Model Management
+    # ------------------------------------------------------------------
+
+    def get_api_keys_status(self) -> list[dict[str, Any]]:
+        """Return the configuration status of all supported Cloud LLM providers."""
+        env_file = hermclaw_home() / ".env"
+        env_vars = dict(os.environ)
+
+        # Also parse .env file in case some vars weren't yet in os.environ
+        if env_file.exists():
+            try:
+                for line in env_file.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, _, v = line.partition("=")
+                        k = k.strip()
+                        v = v.strip().strip('"').strip("'")
+                        if k and k not in env_vars:
+                            env_vars[k] = v
+            except Exception:
+                pass
+
+        result = []
+        for p in CLOUD_PROVIDERS:
+            val = env_vars.get(p["env_var"]) or (env_vars.get(p.get("alt_env_var")) if p.get("alt_env_var") else None)
+            is_set = bool(val and val.strip())
+            masked = ""
+            if is_set:
+                v_clean = val.strip()
+                if len(v_clean) > 8:
+                    masked = f"{v_clean[:4]}...{v_clean[-4:]}"
+                else:
+                    masked = "****"
+
+            result.append({
+                "id": p["id"],
+                "name": p["name"],
+                "env_var": p["env_var"],
+                "configured": is_set,
+                "preview": masked,
+                "placeholder": p["placeholder"],
+                "models_count": len(p["models"]),
+            })
+        return result
+
+    def save_api_keys(self, keys: dict[str, str]) -> tuple[bool, str]:
+        """Save API keys to ~/.hermclaw/.env and update os.environ in-memory."""
+        env_file = hermclaw_home() / ".env"
+        env_file.parent.mkdir(parents=True, exist_ok=True)
+
+        existing_lines = []
+        existing_keys = set()
+        if env_file.exists():
+            try:
+                existing_lines = env_file.read_text(encoding="utf-8").splitlines()
+            except Exception:
+                existing_lines = []
+
+        new_lines = []
+        updated_keys = set()
+
+        for line in existing_lines:
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#") and "=" in stripped:
+                k, _, _ = stripped.partition("=")
+                k = k.strip()
+                existing_keys.add(k)
+                if k in keys and keys[k] is not None:
+                    v = str(keys[k]).strip()
+                    new_lines.append(f'{k}="{v}"')
+                    updated_keys.add(k)
+                    os.environ[k] = v
+                else:
+                    new_lines.append(line)
+            else:
+                new_lines.append(line)
+
+        # Append any new keys not already in the file
+        for k, v in keys.items():
+            if k not in updated_keys and v is not None and str(v).strip():
+                v_clean = str(v).strip()
+                new_lines.append(f'{k}="{v_clean}"')
+                os.environ[k] = v_clean
+                if k == "GEMINI_API_KEY":
+                    os.environ["GOOGLE_API_KEY"] = v_clean
+                elif k == "GOOGLE_API_KEY":
+                    os.environ["GEMINI_API_KEY"] = v_clean
+
+        # Mirror GEMINI_API_KEY to GOOGLE_API_KEY
+        if "GEMINI_API_KEY" in keys and keys["GEMINI_API_KEY"]:
+            os.environ["GOOGLE_API_KEY"] = str(keys["GEMINI_API_KEY"]).strip()
+
+        try:
+            env_file.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+            return True, "API keys saved successfully"
+        except Exception as exc:
+            return False, f"Failed to save .env file: {exc}"
+
+    async def get_available_models(self) -> list[dict[str, Any]]:
+        """Return a unified list of available local and cloud models with local/cloud tagging."""
+        models: list[dict[str, Any]] = []
+
+        # 1. Local Ollama models
+        ollama_online, ollama_models = await self.check_ollama()
+        for m in ollama_models:
+            models.append({
+                "id": m,
+                "name": m,
+                "type": "local",
+                "provider": "ollama",
+                "tag": "[Local]",
+                "display_label": f"{m} [Local]",
+                "available": True,
+            })
+
+        # Fallback local model if Ollama returned empty but active config is local
+        config_res = load_config(self.config_path)
+        active_model = getattr(self, "_current_model", None) or (config_res.config.brain.model.model_name if config_res.config else "gemma4:12b")
+        active_provider = getattr(self, "_current_provider", None) or (config_res.config.brain.model.provider if config_res.config else "openai_compat")
+        if not any(m["id"] == active_model for m in models) and active_provider in ("openai_compat", "ollama"):
+            models.insert(0, {
+                "id": active_model,
+                "name": active_model,
+                "type": "local",
+                "provider": "ollama",
+                "tag": "[Local]",
+                "display_label": f"{active_model} [Local]",
+                "available": ollama_online,
+            })
+
+        # 2. Cloud models for configured providers
+        status_list = self.get_api_keys_status()
+        status_map = {item["id"]: item["configured"] for item in status_list}
+
+        for cp in CLOUD_PROVIDERS:
+            is_configured = status_map.get(cp["id"], False)
+            if is_configured:
+                for cm in cp["models"]:
+                    models.append({
+                        "id": cm["id"],
+                        "name": cm["name"],
+                        "type": "cloud",
+                        "provider": cp["id"],
+                        "tag": f"[Cloud - {cp['name']}]",
+                        "display_label": f"{cm['id']} [Cloud - {cp['name']}]",
+                        "available": True,
+                        "context": cm.get("context", "128k"),
+                    })
+
+        return models
+
+    async def switch_model(self, model_name: str) -> dict[str, Any]:
+        """Switch the active LLM model and reconfigure runtime transport."""
+        runtime = await self.get_runtime()
+        catalog = ModelCatalog()
+        info = catalog.resolve(model_name)
+
+        if not info:
+            info = ModelInfo(
+                name=model_name,
+                provider="openai_compat",
+                context_window=128_000,
+                max_output_tokens=8192,
+                description=f"{model_name} (local via Ollama)",
+                api_base="http://localhost:11434/v1",
+            )
+
+        api_base_env = None
+        if info.provider == "anthropic":
+            api_key_env = "ANTHROPIC_API_KEY"
+            if not os.environ.get("ANTHROPIC_API_KEY"):
+                raise ValueError("Anthropic API key is not configured. Please save it in Settings.")
+        elif info.provider == "gemini":
+            api_key_env = "GEMINI_API_KEY" if os.environ.get("GEMINI_API_KEY") else "GOOGLE_API_KEY"
+            if not os.environ.get(api_key_env):
+                raise ValueError("Google Gemini API key is not configured. Please save it in Settings.")
+        else:  # openai_compat
+            if "localhost" in (info.api_base or "") or "127.0.0.1" in (info.api_base or "") or not info.api_base:
+                api_base_env = "OLLAMA_API_BASE"
+                api_key_env = "OLLAMA_API_KEY"
+                os.environ["OLLAMA_API_BASE"] = info.api_base or "http://localhost:11434/v1"
+            elif "openai.com" in info.api_base:
+                api_base_env = "OPENAI_API_BASE"
+                api_key_env = "OPENAI_API_KEY"
+                if not os.environ.get("OPENAI_API_KEY"):
+                    raise ValueError("OpenAI API key is not configured. Please save it in Settings.")
+                os.environ["OPENAI_API_BASE"] = info.api_base
+            elif "groq.com" in info.api_base:
+                api_base_env = "GROQ_API_BASE"
+                api_key_env = "GROQ_API_KEY"
+                if not os.environ.get("GROQ_API_KEY"):
+                    raise ValueError("Groq API key is not configured. Please save it in Settings.")
+                os.environ["GROQ_API_BASE"] = info.api_base
+            elif "deepseek.com" in info.api_base:
+                api_base_env = "DEEPSEEK_API_BASE"
+                api_key_env = "DEEPSEEK_API_KEY"
+                if not os.environ.get("DEEPSEEK_API_KEY"):
+                    raise ValueError("DeepSeek API key is not configured. Please save it in Settings.")
+                os.environ["DEEPSEEK_API_BASE"] = info.api_base
+            elif "openrouter.ai" in info.api_base:
+                api_base_env = "OPENROUTER_API_BASE"
+                api_key_env = "OPENROUTER_API_KEY"
+                if not os.environ.get("OPENROUTER_API_KEY"):
+                    raise ValueError("OpenRouter API key is not configured. Please save it in Settings.")
+                os.environ["OPENROUTER_API_BASE"] = info.api_base
+            else:
+                api_base_env = f"HERMCLAW_API_BASE_{info.provider.upper()}"
+                api_key_env = "OPENAI_API_KEY"
+                os.environ[api_base_env] = info.api_base
+
+        new_cfg = ModelConfig(
+            provider=info.provider,
+            model_name=info.name,
+            api_base_env=api_base_env,
+            api_key_env=api_key_env,
+            context_window=info.context_window,
+        )
+
+        transport = build_transport(new_cfg)
+        runtime.agent.transport = transport
+        runtime.agent.model_config = new_cfg
+        self._current_model = info.name
+        self._current_provider = info.provider
+
+        logger.info("dashboard.model_switched", model=info.name, provider=info.provider)
+        return {
+            "success": True,
+            "model_name": info.name,
+            "provider": info.provider,
+            "description": info.description,
+            "context_window": info.context_window,
+        }
+
+    # ------------------------------------------------------------------
     # Overview & Telemetry
     # ------------------------------------------------------------------
 
@@ -128,11 +434,15 @@ class DashboardService:
         config_res = load_config(self.config_path)
         config = config_res.config
 
-        model_name = config.brain.model.model_name if config else "unknown"
-        provider = config.brain.model.provider if config else "unknown"
+        base_model_name = config.brain.model.model_name if config else "unknown"
+        base_provider = config.brain.model.provider if config else "unknown"
+
+        active_model = getattr(self, "_current_model", None) or base_model_name
+        active_provider = getattr(self, "_current_provider", None) or base_provider
 
         # Check Ollama connection
-        ollama_online, ollama_models = await self.check_ollama()
+        ollama_online, _ = await self.check_ollama()
+        all_models = await self.get_available_models()
 
         # Session count
         session_count = 0
@@ -164,11 +474,12 @@ class DashboardService:
             "profile": self.profile,
             "profiles_available": self.pm.list_profiles(),
             "model": {
-                "name": model_name,
-                "provider": provider,
+                "name": active_model,
+                "provider": active_provider,
                 "ollama_online": ollama_online,
-                "available_models": ollama_models,
+                "available_models": all_models,
             },
+
             "stats": {
                 "total_sessions": session_count,
                 "total_skills": len(skills_info),
@@ -275,8 +586,10 @@ class DashboardService:
                 conn.close()
         return sid
 
-    async def send_message(self, session_id: str, message: str) -> dict[str, Any]:
+    async def send_message(self, session_id: str, message: str, model: Optional[str] = None) -> dict[str, Any]:
         """Run an agent turn on a session and capture response and tool calls."""
+        if model and model.strip():
+            await self.switch_model(model.strip())
         runtime = await self.get_runtime()
 
         start_time = time.time()

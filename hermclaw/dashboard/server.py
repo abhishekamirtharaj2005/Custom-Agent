@@ -21,6 +21,15 @@ from hermclaw.dashboard.service import DashboardService
 class ChatRequest(BaseModel):
     session_id: str
     message: str
+    model: Optional[str] = None
+
+
+class SwitchModelRequest(BaseModel):
+    model: str
+
+
+class ApiKeysSaveRequest(BaseModel):
+    keys: dict[str, str]
 
 
 class CreateSessionRequest(BaseModel):
@@ -144,6 +153,32 @@ def create_dashboard_app(
         return {"accepted": True, "errors": []}
 
     # ------------------------------------------------------------------
+    # Cloud LLM API Keys & Provider Settings
+    # ------------------------------------------------------------------
+
+    @app.get("/api/settings/keys")
+    async def get_settings_keys() -> list[dict[str, Any]]:
+        return svc.get_api_keys_status()
+
+    @app.post("/api/settings/keys")
+    async def save_settings_keys(req: ApiKeysSaveRequest) -> dict[str, Any]:
+        ok, msg = svc.save_api_keys(req.keys)
+        if not ok:
+            raise HTTPException(status_code=400, detail=msg)
+        return {"success": True, "message": msg}
+
+    @app.get("/api/models")
+    async def get_models() -> list[dict[str, Any]]:
+        return await svc.get_available_models()
+
+    @app.post("/api/chat/switch-model")
+    async def switch_model(req: SwitchModelRequest) -> dict[str, Any]:
+        try:
+            return await svc.switch_model(req.model)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    # ------------------------------------------------------------------
     # Chat & Sessions API
     # ------------------------------------------------------------------
 
@@ -167,7 +202,11 @@ def create_dashboard_app(
 
     @app.post("/api/chat")
     async def post_chat(req: ChatRequest) -> dict[str, Any]:
-        return await svc.send_message(req.session_id, req.message)
+        try:
+            return await svc.send_message(req.session_id, req.message, model=req.model)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
 
     # ------------------------------------------------------------------
     # Skills & Reflection API

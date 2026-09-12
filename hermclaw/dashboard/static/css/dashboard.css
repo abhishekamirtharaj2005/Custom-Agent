@@ -2097,3 +2097,130 @@ body {
 .text-center { text-align: center; }
 .text-muted { color: var(--text-muted); }
 .text-sm { font-size: 0.75rem; }
+
+/* Cloud LLM API Keys Styles */
+.api-keys-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.25rem;
+  margin-top: 1rem;
+}
+
+.api-key-item {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+}
+
+.api-key-item:hover {
+  border-color: rgba(99, 102, 241, 0.4);
+  background: rgba(15, 23, 42, 0.8);
+}
+
+.api-key-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.provider-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+
+.api-key-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.api-key-input-wrapper input {
+  padding-right: 2.5rem;
+  width: 100%;
+}
+
+.btn-toggle-eye {
+  position: absolute;
+  right: 0.5rem;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0.25rem;
+  font-size: 0.9rem;
+  transition: color 0.15s;
+}
+
+.btn-toggle-eye:hover {
+  color: #fff;
+}
+
+.provider-models-hint {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  line-height: 1.3;
+}
+
+.badge-configured {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--accent-emerald);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: var(--radius-full);
+  padding: 0.15rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.badge-not-set {
+  background: rgba(148, 163, 184, 0.1);
+  color: var(--text-dim);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: var(--radius-full);
+  padding: 0.15rem 0.5rem;
+  font-size: 0.7rem;
+}
+
+.alert-banner {
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md);
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.alert-banner.success {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #6ee7b7;
+}
+
+.alert-banner.error {
+  background: rgba(244, 63, 94, 0.15);
+  border: 1px solid rgba(244, 63, 94, 0.4);
+  color: #fda4af;
+}
+
+/* Enhanced Model Picker in Chat */
+.model-picker-select optgroup {
+  background: #0f172a;
+  color: var(--accent-cyan);
+  font-weight: 700;
+  font-size: 0.8rem;
+  padding: 0.25rem 0;
+}
+
+.model-picker-select option {
+  background: #1e293b;
+  color: #f8fafc;
+  font-weight: normal;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.5rem;
+}
+

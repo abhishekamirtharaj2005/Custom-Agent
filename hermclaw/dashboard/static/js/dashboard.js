@@ -108,7 +108,7 @@ function switchTab(tabId) {
   else if (tabId === 'tasks') { loadKanban(); loadTodos(); loadGoals(); }
   else if (tabId === 'tools') loadToolsCatalog();
   else if (tabId === 'pet') { loadPet(); loadAchievements(); }
-  else if (tabId === 'diagnostics') { loadDiagnostics(); loadRawConfig(); }
+  else if (tabId === 'diagnostics') { loadDiagnostics(); loadRawConfig(); loadApiKeysSettings(); }
 }
 
 // Toast Notifications
@@ -152,11 +152,14 @@ async function loadOverview() {
     }
 
     // Populate model select in chat
-    const modelSelect = document.getElementById('chat-model-select');
-    if (modelSelect && data.model.available_models.length > 0) {
-      modelSelect.innerHTML = data.model.available_models.map(m => 
-        `<option value="${m}" ${m === data.model.name ? 'selected' : ''}>${m}</option>`
-      ).join('');
+    populateModelDropdown(data.model.available_models, data.model.name);
+    const sidebarBadge = document.getElementById('sidebar-model-badge');
+    if (sidebarBadge && data.model.name) {
+      sidebarBadge.textContent = data.model.name;
+    }
+    const overviewModel = document.getElementById('overview-model-name');
+    if (overviewModel && data.model.name) {
+      overviewModel.textContent = data.model.name;
     }
 
     // Stats Grid
@@ -413,15 +416,21 @@ function setupChatHandlers() {
     pill.classList.remove('hidden');
 
     try {
+      const selectedModel = document.getElementById('chat-model-select')?.value;
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           session_id: state.activeSessionId,
           message: text,
+          model: selectedModel || undefined,
         }),
       });
       const data = await res.json();
+      if (!res.ok) {
+        showToast(data.detail || 'Error from agent', 'error');
+      }
+
 
       // Append assistant bubble
       let toolsHtml = '';
@@ -512,7 +521,35 @@ function setupChatHandlers() {
       showToast('Delete failed', 'error');
     }
   });
+
+  // Switch model on dropdown change
+  const modelSelect = document.getElementById('chat-model-select');
+  modelSelect?.addEventListener('change', async () => {
+    const newModel = modelSelect.value;
+    if (!newModel) return;
+    try {
+      const res = await fetch('/api/chat/switch-model', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: newModel }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(`Switched active model to ${newModel}`, 'success');
+        const badge = document.getElementById('sidebar-model-badge');
+        if (badge) badge.textContent = newModel;
+        const ov = document.getElementById('overview-model-name');
+        if (ov) ov.textContent = newModel;
+      } else {
+        showToast(`Model switch failed: ${data.detail || 'Error'}`, 'error');
+        await loadOverview();
+      }
+    } catch (err) {
+      showToast('Error switching model', 'error');
+    }
+  });
 }
+
 
 // ==========================================================================
 // 3. Skills Registry & Self-Learning Reflection
@@ -1415,6 +1452,156 @@ async function loadRawConfig() {
   } catch (err) {}
 }
 
+async function loadApiKeysSettings() {
+  try {
+    const res = await fetch('/api/settings/keys');
+    if (!res.ok) return;
+    const providers = await res.json();
+    providers.forEach(p => {
+      const badge = document.getElementById(`badge-key-${p.id}`);
+      const input = document.getElementById(`input-key-${p.id}`);
+      if (badge) {
+        if (p.configured) {
+          badge.className = 'badge-configured';
+          badge.textContent = `✓ Configured (${p.preview})`;
+        } else {
+          badge.className = 'badge-not-set';
+          badge.textContent = 'Not Set';
+        }
+      }
+      if (input) {
+        input.placeholder = p.configured ? `Configured (${p.preview}) - enter new to change` : p.placeholder;
+      }
+    });
+  } catch (err) {
+    console.error('Failed to load API keys status:', err);
+  }
+}
+
+async function saveApiKeysSettings() {
+  const btn = document.getElementById('btn-save-api-keys');
+  const toast = document.getElementById('api-keys-toast');
+  const originalText = btn ? btn.textContent : 'Save API Keys';
+  if (btn) {
+    btn.textContent = 'Saving...';
+    btn.disabled = true;
+  }
+
+  const payload = {};
+  const mapping = {
+    openai: 'OPENAI_API_KEY',
+    anthropic: 'ANTHROPIC_API_KEY',
+    gemini: 'GEMINI_API_KEY',
+    groq: 'GROQ_API_KEY',
+    deepseek: 'DEEPSEEK_API_KEY',
+    openrouter: 'OPENROUTER_API_KEY',
+  };
+
+  Object.entries(mapping).forEach(([id, envKey]) => {
+    const input = document.getElementById(`input-key-${id}`);
+    if (input && input.value.trim()) {
+      payload[envKey] = input.value.trim();
+    }
+  });
+
+  try {
+    const res = await fetch('/api/settings/keys', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keys: payload }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      showToast('Cloud LLM API keys saved! Models unlocked in chat.', 'success');
+      if (toast) {
+        toast.className = 'alert-banner success';
+        toast.textContent = '✓ Cloud LLM API keys saved successfully. Associated models are now unlocked in the Chat LLM dropdown.';
+        toast.classList.remove('hidden');
+        setTimeout(() => toast.classList.add('hidden'), 5000);
+      }
+      // Clear entered values for security
+      Object.keys(mapping).forEach(id => {
+        const input = document.getElementById(`input-key-${id}`);
+        if (input) input.value = '';
+      });
+      // Refresh status and model dropdown
+      await loadApiKeysSettings();
+      await loadOverview();
+    } else {
+      showToast(`Error: ${data.detail || 'Could not save keys'}`, 'error');
+      if (toast) {
+        toast.className = 'alert-banner error';
+        toast.textContent = `Error saving API keys: ${data.detail || 'Unknown error'}`;
+        toast.classList.remove('hidden');
+      }
+    }
+  } catch (err) {
+    showToast('Failed to save API keys', 'error');
+  } finally {
+    if (btn) {
+      btn.textContent = originalText;
+      btn.disabled = false;
+    }
+  }
+}
+
+function populateModelDropdown(models, currentModel) {
+  const modelSelect = document.getElementById('chat-model-select');
+  if (!modelSelect) return;
+
+  if (!models || models.length === 0) {
+    modelSelect.innerHTML = '<option value="gemma4:12b">gemma4:12b [Local]</option>';
+    return;
+  }
+
+  const currentVal = currentModel || modelSelect.value;
+  const localModels = [];
+  const cloudByProvider = {};
+
+  models.forEach(m => {
+    const id = typeof m === 'object' ? m.id : m;
+    const isCloud = typeof m === 'object' && m.type === 'cloud';
+    const provider = (typeof m === 'object' && m.provider) ? m.provider : 'other';
+    const label = (typeof m === 'object' && m.display_label) ? m.display_label : (isCloud ? `${id} [Cloud]` : `${id} [Local]`);
+
+    if (!isCloud) {
+      localModels.push({ id, label });
+    } else {
+      if (!cloudByProvider[provider]) cloudByProvider[provider] = [];
+      cloudByProvider[provider].push({ id, label });
+    }
+  });
+
+  let html = '';
+  if (localModels.length > 0) {
+    html += '<optgroup label="Local Models (Ollama)">';
+    localModels.forEach(m => {
+      html += `<option value="${m.id}" ${m.id === currentVal ? 'selected' : ''}>${escapeHtml(m.label)}</option>`;
+    });
+    html += '</optgroup>';
+  }
+
+  const providerDisplayNames = {
+    openai: 'Cloud Models (OpenAI)',
+    anthropic: 'Cloud Models (Anthropic Claude)',
+    gemini: 'Cloud Models (Google Gemini)',
+    groq: 'Cloud Models (Groq)',
+    deepseek: 'Cloud Models (DeepSeek)',
+    openrouter: 'Cloud Models (OpenRouter)',
+  };
+
+  Object.keys(cloudByProvider).forEach(p => {
+    const groupLabel = providerDisplayNames[p] || `Cloud Models (${p.toUpperCase()})`;
+    html += `<optgroup label="${groupLabel}">`;
+    cloudByProvider[p].forEach(m => {
+      html += `<option value="${m.id}" ${m.id === currentVal ? 'selected' : ''}>${escapeHtml(m.label)}</option>`;
+    });
+    html += '</optgroup>';
+  });
+
+  modelSelect.innerHTML = html;
+}
+
 function setupDiagnosticsHandlers() {
   document.getElementById('btn-run-doctor-full')?.addEventListener('click', () => {
     showToast('Re-running diagnostics...', 'info');
@@ -1439,7 +1626,30 @@ function setupDiagnosticsHandlers() {
       showToast('Failed to save config', 'error');
     }
   });
+
+  // Save API keys button
+  document.getElementById('btn-save-api-keys')?.addEventListener('click', saveApiKeysSettings);
+
+  // Eye toggles for password visibility
+  document.querySelectorAll('.btn-toggle-eye').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetId = btn.dataset.target;
+      const input = document.getElementById(targetId);
+      if (!input) return;
+      if (input.type === 'password') {
+        input.type = 'text';
+        btn.textContent = '🙈';
+      } else {
+        input.type = 'password';
+        btn.textContent = '👁';
+      }
+    });
+  });
+
+  // Initial load of API keys status
+  loadApiKeysSettings();
 }
+
 
 // ==========================================================================
 // Modals & Global Helpers

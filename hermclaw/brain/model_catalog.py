@@ -109,8 +109,30 @@ _BUILTIN_MODELS: list[ModelInfo] = [
         input_cost_per_1m=15.00, output_cost_per_1m=60.00,
         api_base="https://api.openai.com/v1",
     ),
+    ModelInfo(
+        name="o3-mini", provider="openai_compat",
+        context_window=200_000, max_output_tokens=100_000,
+        supports_vision=False, description="OpenAI o3-mini reasoning model (fast, math/code)",
+        aliases=["o3", "o3mini"],
+        input_cost_per_1m=1.10, output_cost_per_1m=4.40,
+        api_base="https://api.openai.com/v1",
+    ),
 
     # --- Anthropic ---
+    ModelInfo(
+        name="claude-3-7-sonnet-latest", provider="anthropic",
+        context_window=200_000, max_output_tokens=16_384,
+        supports_vision=True, description="Anthropic Claude 3.7 Sonnet (Hybrid Reasoning)",
+        aliases=["claude-3-7-sonnet", "claude-3.7-sonnet", "sonnet-3.7"],
+        input_cost_per_1m=3.00, output_cost_per_1m=15.00,
+    ),
+    ModelInfo(
+        name="claude-3-5-sonnet-latest", provider="anthropic",
+        context_window=200_000, max_output_tokens=8192,
+        supports_vision=True, description="Anthropic Claude 3.5 Sonnet",
+        aliases=["claude-3-5-sonnet", "claude-3.5-sonnet", "sonnet-3.5"],
+        input_cost_per_1m=3.00, output_cost_per_1m=15.00,
+    ),
     ModelInfo(
         name="claude-sonnet-4-20250514", provider="anthropic",
         context_window=200_000, max_output_tokens=16_384,
@@ -122,26 +144,49 @@ _BUILTIN_MODELS: list[ModelInfo] = [
         name="claude-3-5-haiku-20241022", provider="anthropic",
         context_window=200_000, max_output_tokens=8192,
         description="Anthropic Claude 3.5 Haiku (fast, cheap)",
-        aliases=["haiku"],
+        aliases=["haiku", "claude-3-5-haiku", "claude-3.5-haiku"],
         input_cost_per_1m=0.80, output_cost_per_1m=4.00,
     ),
 
     # --- Google ---
     ModelInfo(
-        name="gemini-2.5-pro", provider="openai_compat",
+        name="gemini-2.5-pro", provider="gemini",
         context_window=1_000_000, max_output_tokens=65_536,
         supports_vision=True, description="Google Gemini 2.5 Pro",
         aliases=["gemini", "gemini-pro"],
         input_cost_per_1m=1.25, output_cost_per_1m=10.00,
-        api_base="https://generativelanguage.googleapis.com/v1beta/openai",
     ),
     ModelInfo(
-        name="gemini-2.5-flash", provider="openai_compat",
+        name="gemini-2.5-flash", provider="gemini",
         context_window=1_000_000, max_output_tokens=65_536,
         supports_vision=True, description="Google Gemini 2.5 Flash (fast, cheap)",
         aliases=["flash", "gemini-flash"],
         input_cost_per_1m=0.15, output_cost_per_1m=0.60,
-        api_base="https://generativelanguage.googleapis.com/v1beta/openai",
+    ),
+    ModelInfo(
+        name="gemini-2.0-flash", provider="gemini",
+        context_window=1_000_000, max_output_tokens=8192,
+        supports_vision=True, description="Google Gemini 2.0 Flash",
+        aliases=["gemini-2", "gemini-2.0"],
+        input_cost_per_1m=0.10, output_cost_per_1m=0.40,
+    ),
+
+    # --- DeepSeek ---
+    ModelInfo(
+        name="deepseek-chat", provider="openai_compat",
+        context_window=64_000, max_output_tokens=8192,
+        description="DeepSeek V3 (Chat & Coding)",
+        aliases=["deepseek-v3"],
+        input_cost_per_1m=0.14, output_cost_per_1m=0.28,
+        api_base="https://api.deepseek.com/v1",
+    ),
+    ModelInfo(
+        name="deepseek-reasoner", provider="openai_compat",
+        context_window=64_000, max_output_tokens=8192,
+        description="DeepSeek R1 (Reasoner)",
+        aliases=["deepseek-r1-api"],
+        input_cost_per_1m=0.55, output_cost_per_1m=2.19,
+        api_base="https://api.deepseek.com/v1",
     ),
 
     # --- OpenRouter ---
@@ -172,6 +217,7 @@ _BUILTIN_MODELS: list[ModelInfo] = [
         api_base="https://api.together.xyz/v1",
     ),
 ]
+
 
 
 class ModelCatalog:

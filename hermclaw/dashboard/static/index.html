@@ -713,7 +713,94 @@
           </div>
         </div>
 
+        <!-- Cloud LLM Provider API Keys Card -->
+        <div class="col-card" style="margin-bottom: 1.5rem;">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">🔑 Cloud LLM Provider API Keys</h3>
+              <p class="card-hint">Save API keys for OpenAI, Claude, Gemini, and other cloud providers. Saved models automatically display in the Chat LLM dropdown with <b>[Cloud]</b> tags.</p>
+            </div>
+            <button class="btn btn-sm btn-primary" id="btn-save-api-keys">Save API Keys</button>
+          </div>
+          <div id="api-keys-toast" class="alert-banner hidden"></div>
+          <div class="api-keys-grid">
+            <!-- OpenAI -->
+            <div class="api-key-item">
+              <div class="api-key-header">
+                <span class="provider-title">OpenAI</span>
+                <span class="badge" id="badge-key-openai">Checking...</span>
+              </div>
+              <div class="api-key-input-wrapper">
+                <input type="password" id="input-key-openai" class="form-control font-mono" placeholder="sk-proj-...">
+                <button class="btn-toggle-eye" type="button" data-target="input-key-openai" title="Toggle visibility">👁</button>
+              </div>
+              <span class="provider-models-hint">GPT-4o, GPT-4o Mini, o1, o3-mini</span>
+            </div>
+            <!-- Anthropic Claude -->
+            <div class="api-key-item">
+              <div class="api-key-header">
+                <span class="provider-title">Anthropic Claude</span>
+                <span class="badge" id="badge-key-anthropic">Checking...</span>
+              </div>
+              <div class="api-key-input-wrapper">
+                <input type="password" id="input-key-anthropic" class="form-control font-mono" placeholder="sk-ant-api03-...">
+                <button class="btn-toggle-eye" type="button" data-target="input-key-anthropic" title="Toggle visibility">👁</button>
+              </div>
+              <span class="provider-models-hint">Claude 3.7 Sonnet, 3.5 Sonnet, 3.5 Haiku</span>
+            </div>
+            <!-- Google Gemini -->
+            <div class="api-key-item">
+              <div class="api-key-header">
+                <span class="provider-title">Google Gemini</span>
+                <span class="badge" id="badge-key-gemini">Checking...</span>
+              </div>
+              <div class="api-key-input-wrapper">
+                <input type="password" id="input-key-gemini" class="form-control font-mono" placeholder="AIzaSy...">
+                <button class="btn-toggle-eye" type="button" data-target="input-key-gemini" title="Toggle visibility">👁</button>
+              </div>
+              <span class="provider-models-hint">Gemini 2.5 Pro, 2.5 Flash, 2.0 Flash</span>
+            </div>
+            <!-- Groq -->
+            <div class="api-key-item">
+              <div class="api-key-header">
+                <span class="provider-title">Groq</span>
+                <span class="badge" id="badge-key-groq">Checking...</span>
+              </div>
+              <div class="api-key-input-wrapper">
+                <input type="password" id="input-key-groq" class="form-control font-mono" placeholder="gsk_...">
+                <button class="btn-toggle-eye" type="button" data-target="input-key-groq" title="Toggle visibility">👁</button>
+              </div>
+              <span class="provider-models-hint">Llama 3.3 70B (High Speed)</span>
+            </div>
+            <!-- DeepSeek -->
+            <div class="api-key-item">
+              <div class="api-key-header">
+                <span class="provider-title">DeepSeek</span>
+                <span class="badge" id="badge-key-deepseek">Checking...</span>
+              </div>
+              <div class="api-key-input-wrapper">
+                <input type="password" id="input-key-deepseek" class="form-control font-mono" placeholder="sk-...">
+                <button class="btn-toggle-eye" type="button" data-target="input-key-deepseek" title="Toggle visibility">👁</button>
+              </div>
+              <span class="provider-models-hint">DeepSeek V3, DeepSeek R1 Reasoner</span>
+            </div>
+            <!-- OpenRouter -->
+            <div class="api-key-item">
+              <div class="api-key-header">
+                <span class="provider-title">OpenRouter</span>
+                <span class="badge" id="badge-key-openrouter">Checking...</span>
+              </div>
+              <div class="api-key-input-wrapper">
+                <input type="password" id="input-key-openrouter" class="form-control font-mono" placeholder="sk-or-v1-...">
+                <button class="btn-toggle-eye" type="button" data-target="input-key-openrouter" title="Toggle visibility">👁</button>
+              </div>
+              <span class="provider-models-hint">OpenRouter Auto & multi-model routing</span>
+            </div>
+          </div>
+        </div>
+
         <div class="diagnostics-split-grid">
+
           <!-- Doctor Health Checks List -->
           <div class="col-card">
             <div class="card-header">
