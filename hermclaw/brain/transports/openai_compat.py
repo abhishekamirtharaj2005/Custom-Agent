@@ -40,7 +40,7 @@ class ChatCompletionsTransport(ProviderTransport):
         api_base: str,
         max_tokens: int = 4096,
         max_retries: int = 3,
-        timeout_s: float = 120.0,
+        timeout_s: float = 300.0,
     ) -> None:
         self.model_name = model_name
         self.api_base = api_base.rstrip("/")
@@ -228,11 +228,11 @@ class ChatCompletionsTransport(ProviderTransport):
         is_ollama = "localhost" in self.api_base or "127.0.0.1" in self.api_base
         if is_ollama:
             # Ollama pre-allocates the FULL num_ctx window regardless of input size.
-            # 131072 causes extreme slowness/timeouts on consumer hardware.
-            # 32768 (32K) is enough for agent workloads and stays fast.
+            # 32768 (32K) causes extreme slowness/timeouts and CPU offloading on consumer GPUs.
+            # 8192 is optimal for agent workloads and stays fast in VRAM.
             # num_predict=-1 means unlimited output tokens.
-            payload["max_tokens"] = 16384
-            payload["options"] = {"num_ctx": 32768, "num_predict": -1}
+            payload["max_tokens"] = 8192
+            payload["options"] = {"num_ctx": 8192, "num_predict": -1}
         elif self.max_tokens:
             payload["max_tokens"] = self.max_tokens
         if tools:

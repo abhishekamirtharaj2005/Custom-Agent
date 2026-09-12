@@ -609,9 +609,31 @@ class HermclawAgent:
             # Retry up to 2 times if model returns completely empty
             response = None
             for retry in range(3):
-                resp_candidate, _used_model_cfg = await self._send_with_fallback(
-                    messages, tools, system_prompt, stream=(use_stream and retry == 0),
-                )
+                try:
+                    resp_candidate, _used_model_cfg = await self._send_with_fallback(
+                        messages, tools, system_prompt, stream=(use_stream and retry == 0),
+                    )
+                except TransportError as exc:
+                    if tool_records and iteration > 0:
+                        logger.warning("agent.transport_error_after_tools", iteration=iteration, error=str(exc))
+                        summary_parts = []
+                        for rec in tool_records:
+                            status = "✓" if rec.result.ok else "✗"
+                            output = rec.result.output[:300] if rec.result.output else (rec.result.error or "")[:300]
+                            summary_parts.append(f"{status} **{rec.name}**: {output}")
+                        final_text = (
+                            "I executed the requested action(s), but the model timed out while generating the final message:\n\n"
+                            + "\n\n".join(summary_parts)
+                        )
+                        final_stop = "timeout_after_tools"
+                        await self.memory_store.a_add_message(session_id, "assistant", final_text)
+                        return AgentTurnResult(
+                            response=AgentResponse(text=final_text, tool_calls=[], stop_reason=final_stop, usage=total_usage),
+                            used_model_config=self.model_config,
+                            tool_records=tool_records,
+                            session_id=session_id,
+                        )
+                    raise
                 total_usage = add_usage(total_usage, resp_candidate.usage)
 
                 if resp_candidate.text.strip() or resp_candidate.tool_calls:
