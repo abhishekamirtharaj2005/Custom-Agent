@@ -179,8 +179,8 @@ class MemoryConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     compression_threshold: float = Field(default=0.3, gt=0.0, le=1.0)
     keep_recent_exchanges: int = Field(default=2, ge=0)
-    memory_char_limit: int = Field(default=2200, gt=0)
-    user_char_limit: int = Field(default=1375, gt=0)
+    memory_char_limit: int = Field(default=100000, gt=0)
+    user_char_limit: int = Field(default=100000, gt=0)
 
 
 class ReflectionConfig(BaseModel):

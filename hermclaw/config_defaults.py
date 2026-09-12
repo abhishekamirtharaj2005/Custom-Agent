@@ -75,8 +75,8 @@ brain:
   memory:
     compression_threshold: 0.3       # fraction of context window that triggers compression
     keep_recent_exchanges: 2
-    memory_char_limit: 2200
-    user_char_limit: 1375
+    memory_char_limit: 100000
+    user_char_limit: 100000
   reflection:
     enabled: true
     trigger_every_n_turns: 10        # learn faster from conversations

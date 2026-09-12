@@ -118,3 +118,27 @@ async def test_concurrent_profiles_never_cross_contaminate(tmp_path: Path) -> No
     workbot_touched = [p for p in opened_paths if "/work_bot/" in p]
     assert alice_touched and workbot_touched
     assert not (set(alice_touched) & set(workbot_touched))
+
+
+def test_deduplication_in_memory_and_user_facts(tmp_path: Path) -> None:
+    pm = ProfileManager(home=tmp_path)
+    paths = pm.ensure_profile("test_user")
+    identity = IdentityFiles(paths)
+
+    # Appending facts with formatting variations and duplicates
+    identity.append_user_facts(["I love Python", "- I love Python."])
+    identity.append_user_facts(["  i love python  ", "I also use Docker"])
+
+    user_content = identity.read_user()
+    facts = [line for line in user_content.splitlines() if line.startswith("- ")]
+    assert len(facts) == 2
+    assert "- I love Python" in facts[0]
+    assert "- I also use Docker" in facts[1]
+
+    # Memory facts deduplication
+    identity.append_memory_facts(["Database port is 5432"])
+    identity.append_memory_facts(["* database port is 5432."])
+    mem_content = identity.read_memory()
+    mem_facts = [line for line in mem_content.splitlines() if line.startswith("- ")]
+    assert len(mem_facts) == 1
+    assert "- Database port is 5432" in mem_facts[0]

@@ -109,6 +109,88 @@ def _trim_to_limit(text: str, limit: int) -> str:
     return "\n".join(kept) + "\n"
 
 
+def _normalize_fact(fact: str) -> str:
+    """Normalize a fact string for duplicate comparison:
+    strips bullet characters, numbers, whitespace, punctuation, and lowercases."""
+    s = fact.strip()
+    while s.startswith(("-", "*", "•", ">", "1.", "2.", "3.", "4.", "5.", "6.", "7.", "8.", "9.", " ")):
+        s = s.lstrip("-*•>0123456789. ")
+    return s.strip().rstrip(".").lower()
+
+
+_HEADER_BOILERPLATE = {
+    "facts hermclaw has learned about you across sessions for this profile",
+    "maintained automatically by the reflection loop, same as memory.md",
+    "durable facts hermclaw has learned across sessions for this profile",
+    "maintained automatically by the reflection loop (`hermclaw reflect`)",
+    "manual edits are fine but may be reorganized on the next reflection pass",
+}
+
+
+def _is_header_line(line: str) -> bool:
+    s = line.strip()
+    if not s or s.startswith("#"):
+        return True
+    norm = s.lower().rstrip(".")
+    return norm in _HEADER_BOILERPLATE
+
+
+def _dedup_lines(text: str, new_facts: Optional[list[str]] = None) -> str:
+    """Deduplicate lines in text while preserving header/commentary sections,
+    and append only novel facts from new_facts."""
+    raw_lines = text.splitlines()
+    header_lines: list[str] = []
+    fact_lines: list[str] = []
+    in_header = True
+
+    for line in raw_lines:
+        if in_header:
+            if _is_header_line(line):
+                header_lines.append(line)
+                continue
+            else:
+                in_header = False
+        fact_lines.append(line)
+
+    seen = set()
+    unique_facts: list[str] = []
+
+    for line in fact_lines:
+        s = line.strip()
+        if not s:
+            continue
+        norm = _normalize_fact(s)
+        if not norm:
+            continue
+        if norm not in seen:
+            seen.add(norm)
+            clean = s.lstrip("-*•>0123456789. ").strip()
+            unique_facts.append(f"- {clean}")
+
+    if new_facts:
+        for f in new_facts:
+            f_clean = f.strip()
+            if not f_clean:
+                continue
+            norm = _normalize_fact(f_clean)
+            if norm and norm not in seen:
+                seen.add(norm)
+                clean = f_clean.lstrip("-*•>0123456789. ").strip()
+                unique_facts.append(f"- {clean}")
+
+    header = "\n".join(header_lines).rstrip()
+    facts_str = "\n".join(unique_facts)
+
+    if header and facts_str:
+        return f"{header}\n\n{facts_str}\n"
+    elif facts_str:
+        return f"{facts_str}\n"
+    elif header:
+        return f"{header}\n"
+    return ""
+
+
+
 @dataclasses.dataclass(frozen=True)
 class ProfilePaths:
     profile: str
@@ -170,7 +252,7 @@ class IdentityFiles:
     and assembles them (plus the core instructions and skill listing)
     into a system prompt. Holds no state beyond its own ProfilePaths."""
 
-    def __init__(self, paths: ProfilePaths, memory_char_limit: int = 2200, user_char_limit: int = 1375) -> None:
+    def __init__(self, paths: ProfilePaths, memory_char_limit: int = 100000, user_char_limit: int = 100000) -> None:
         self.paths = paths
         self.memory_char_limit = memory_char_limit
         self.user_char_limit = user_char_limit
@@ -186,12 +268,15 @@ class IdentityFiles:
 
     def append_memory_facts(self, facts: list[str]) -> None:
         """Reflection-only. SOUL.md is deliberately not touched here or
-        anywhere else Hermclaw writes automatically."""
+        anywhere else Hermclaw writes automatically. Deduplicates facts."""
         facts = [f.strip() for f in facts if f.strip()]
-        if not facts:
-            return
         current = self.read_memory().rstrip()
-        combined = current + "\n" + "\n".join(f"- {f}" for f in facts) + "\n"
+
+        # Deduplicate existing and incoming facts
+        combined = _dedup_lines(current, facts)
+        if not combined:
+            return
+
         if len(combined) > self.memory_char_limit:
             logger.warning(
                 "profiles.memory_over_limit", profile=self.paths.profile,
@@ -201,11 +286,15 @@ class IdentityFiles:
         self.paths.memory_md.write_text(combined, encoding="utf-8")
 
     def append_user_facts(self, facts: list[str]) -> None:
+        """Appends user facts while automatically filtering duplicates and cleaning existing lines."""
         facts = [f.strip() for f in facts if f.strip()]
-        if not facts:
-            return
         current = self.read_user().rstrip()
-        combined = current + "\n" + "\n".join(f"- {f}" for f in facts) + "\n"
+
+        # Deduplicate existing and incoming facts
+        combined = _dedup_lines(current, facts)
+        if not combined:
+            return
+
         if len(combined) > self.user_char_limit:
             logger.warning(
                 "profiles.user_over_limit", profile=self.paths.profile,

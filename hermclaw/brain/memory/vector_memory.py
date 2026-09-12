@@ -152,14 +152,26 @@ class VectorMemory:
             return resp.json()["data"][0]["embedding"]
 
     async def store(self, content: str, category: str = "general", metadata: Optional[dict] = None) -> str:
-        """Store a memory with optional embedding."""
+        """Store a memory with optional embedding, avoiding duplicates."""
+        content_clean = content.strip()
+        if not content_clean:
+            return ""
+
+        # Deduplication check: return existing ID if identical content already stored in this category
+        existing = self._db.execute(
+            "SELECT id FROM memory_vectors WHERE content = ? AND category = ?",
+            (content_clean, category),
+        ).fetchone()
+        if existing:
+            return str(existing[0])
+
         mid = uuid.uuid4().hex[:12]
-        embedding = await self._get_embedding(content)
+        embedding = await self._get_embedding(content_clean)
         embedding_json = json.dumps(embedding) if embedding else None
 
         self._db.execute(
             "INSERT INTO memory_vectors (id, content, embedding, category, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (mid, content, embedding_json, category, json.dumps(metadata or {}), time.time()),
+            (mid, content_clean, embedding_json, category, json.dumps(metadata or {}), time.time()),
         )
         self._db.commit()
         return mid
