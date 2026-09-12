@@ -475,14 +475,37 @@ class DashboardService:
                 "context": m.get("context", "128k"),
                 "can_delete": (prov, mid) in custom_keys,
             })
+
+        # Also list any custom-saved models that don't have their API key set yet
+        for cs in custom_saved:
+            cid = cs.get("id")
+            cprov = (cs.get("provider") or "other").strip().lower()
+            if not any(r["id"] == cid for r in result):
+                prov_status = status_map.get(cprov, {})
+                is_conf = bool(prov_status.get("configured"))
+                result.append({
+                    "id": cid,
+                    "name": cs.get("name", cid),
+                    "provider": cprov,
+                    "provider_name": prov_status.get("name", cprov.title()),
+                    "type": "cloud" if cprov != "ollama" else "local",
+                    "tag": f"[Cloud - {prov_status.get('name', cprov.title())}]" if cprov != "ollama" else "[Local]",
+                    "display_label": f"{cid} [Cloud - {prov_status.get('name', cprov.title())}]",
+                    "configured": is_conf,
+                    "key_preview": prov_status.get("preview") or "Key Not Set",
+                    "is_active": (cid == active_model),
+                    "context": cs.get("context", "128k"),
+                    "can_delete": True,
+                })
+
         return result
 
     async def get_available_models(self) -> list[dict[str, Any]]:
-        """Return a unified list of available local and cloud models with local/cloud tagging."""
+        """Return a unified list of ONLY actually available local and configured cloud models for the chat dropdown."""
         self._ensure_env_loaded()
         models: list[dict[str, Any]] = []
 
-        # 1. Local Ollama models
+        # 1. Local Ollama models (only if Ollama is running)
         ollama_online, ollama_models = await self.check_ollama()
         for m in ollama_models:
             models.append({
@@ -495,35 +518,22 @@ class DashboardService:
                 "available": True,
             })
 
-        # 2. Cloud models for configured providers
+        # 2. Cloud models:
+        # A cloud model is ONLY available if its provider API key is configured!
         status_list = self.get_api_keys_status()
         status_map = {item["id"]: item["configured"] for item in status_list}
 
-        for cp in CLOUD_PROVIDERS:
-            is_configured = status_map.get(cp["id"], False)
-            if is_configured:
-                for cm in cp["models"]:
-                    if not any(m["id"] == cm["id"] for m in models):
-                        models.append({
-                            "id": cm["id"],
-                            "name": cm["name"],
-                            "type": "cloud",
-                            "provider": cp["id"],
-                            "tag": f"[Cloud - {cp['name']}]",
-                            "display_label": f"{cm['id']} [Cloud - {cp['name']}]",
-                            "available": True,
-                            "context": cm.get("context", "128k"),
-                        })
-
-        # 3. Custom models saved by user
         custom_saved = self._read_saved_custom_models()
+        saved_providers_with_models = set()
+
+        # Add models saved by the user IF the provider is configured
         for cm in custom_saved:
             cid = cm.get("id")
             if not cid:
                 continue
             cprov = (cm.get("provider") or "other").strip().lower()
 
-            # Autodetect provider from name if other/missing
+            # Autodetect provider from name if missing/generic
             cid_low = cid.lower()
             if cid_low.startswith("gemini") or cprov == "gemini":
                 cprov = "gemini"
@@ -538,30 +548,52 @@ class DashboardService:
             elif cprov == "openrouter":
                 cprov = "openrouter"
 
+            # Check if this cloud provider is actually configured with an API key
+            if not status_map.get(cprov, False):
+                continue
+
+            saved_providers_with_models.add(cprov)
             cp_meta = next((cp for cp in CLOUD_PROVIDERS if cp["id"] == cprov), None)
             pname = cp_meta["name"] if cp_meta else cprov.title()
-            is_cloud = cm.get("type") == "cloud" or cprov != "ollama"
 
             if not any(m["id"] == cid for m in models):
                 models.append({
                     "id": cid,
                     "name": cm.get("name", cid),
-                    "type": "cloud" if is_cloud else "local",
+                    "type": "cloud",
                     "provider": cprov,
-                    "tag": f"[Cloud - {pname}]" if is_cloud else "[Local]",
-                    "display_label": f"{cid} [Cloud - {pname}]" if is_cloud else f"{cid} [Local]",
+                    "tag": f"[Cloud - {pname}]",
+                    "display_label": f"{cid} [Cloud - {pname}]",
                     "available": True,
                     "context": cm.get("context", "128k"),
                 })
 
-        # 4. Fallback for currently active model if not already present in list
+        # If a cloud provider has an API key configured, but the user has not saved any model for it yet:
+        # Provide ONLY the single default model from CLOUD_PROVIDERS so they have 1 working model
+        for cp in CLOUD_PROVIDERS:
+            pid = cp["id"]
+            if status_map.get(pid, False) and pid not in saved_providers_with_models:
+                default_m = cp["models"][0]
+                if not any(m["id"] == default_m["id"] for m in models):
+                    models.append({
+                        "id": default_m["id"],
+                        "name": default_m["name"],
+                        "type": "cloud",
+                        "provider": pid,
+                        "tag": f"[Cloud - {cp['name']}]",
+                        "display_label": f"{default_m['id']} [Cloud - {cp['name']}]",
+                        "available": True,
+                        "context": default_m.get("context", "128k"),
+                    })
+
+        # 3. Fallback for currently active model if not already present
         config_res = load_config(self.config_path)
         active_model = getattr(self, "_current_model", None) or (config_res.config.brain.model.model_name if config_res.config else "gemma4:12b")
         active_provider = getattr(self, "_current_provider", None) or (config_res.config.brain.model.provider if config_res.config else "openai_compat")
 
         if not any(m["id"] == active_model for m in models):
             act_low = active_model.lower()
-            if act_low.startswith("gemini") or active_provider == "gemini":
+            if (act_low.startswith("gemini") or active_provider == "gemini") and status_map.get("gemini", False):
                 models.insert(0, {
                     "id": active_model,
                     "name": active_model,
@@ -571,7 +603,7 @@ class DashboardService:
                     "display_label": f"{active_model} [Cloud - Google Gemini]",
                     "available": True,
                 })
-            elif act_low.startswith("claude") or active_provider == "anthropic":
+            elif (act_low.startswith("claude") or active_provider == "anthropic") and status_map.get("anthropic", False):
                 models.insert(0, {
                     "id": active_model,
                     "name": active_model,
@@ -581,7 +613,7 @@ class DashboardService:
                     "display_label": f"{active_model} [Cloud - Anthropic Claude]",
                     "available": True,
                 })
-            elif act_low.startswith(("gpt-", "o1", "o3")) or active_provider in ("openai", "openai_compat"):
+            elif (act_low.startswith(("gpt-", "o1", "o3")) or active_provider in ("openai", "openai_compat")) and status_map.get("openai", False):
                 models.insert(0, {
                     "id": active_model,
                     "name": active_model,
@@ -591,7 +623,7 @@ class DashboardService:
                     "display_label": f"{active_model} [Cloud - OpenAI]",
                     "available": True,
                 })
-            else:
+            elif ollama_online and active_provider in ("openai_compat", "ollama"):
                 models.insert(0, {
                     "id": active_model,
                     "name": active_model,
@@ -602,7 +634,7 @@ class DashboardService:
                     "available": ollama_online,
                 })
 
-        # 5. Final normalization: enforce that any Gemini or Claude model is strictly cloud tagged
+        # 4. Final normalization: enforce proper tags
         for m in models:
             mid_low = m["id"].lower()
             if mid_low.startswith("gemini"):

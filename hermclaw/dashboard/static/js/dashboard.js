@@ -1895,6 +1895,7 @@ function populateModelDropdown(models, currentModel) {
       isCloud = false;
       provider = 'ollama';
     } else if (typeof m === 'object' && m !== null) {
+      if (m.available === false || m.configured === false) return;
       id = m.id || m.name || '';
       isCloud = m.type === 'cloud';
       provider = m.provider || (isCloud ? 'other' : 'ollama');
