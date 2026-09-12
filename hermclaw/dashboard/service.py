@@ -290,6 +290,166 @@ class DashboardService:
         except Exception as exc:
             return False, f"Failed to save .env file: {exc}"
 
+    def _get_saved_models_file(self) -> Path:
+        p = hermclaw_home() / "saved_models.json"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        return p
+
+    def _read_saved_custom_models(self) -> list[dict[str, Any]]:
+        f = self._get_saved_models_file()
+        if not f.exists():
+            return []
+        try:
+            import json
+            return json.loads(f.read_text(encoding="utf-8"))
+        except Exception:
+            return []
+
+    def _write_saved_custom_models(self, models: list[dict[str, Any]]) -> None:
+        f = self._get_saved_models_file()
+        try:
+            import json
+            f.write_text(json.dumps(models, indent=2), encoding="utf-8")
+        except Exception as exc:
+            logger.warning("failed_to_write_saved_models", error=str(exc))
+
+    def save_engine_config(
+        self,
+        provider: str,
+        model_name: str,
+        api_key: Optional[str] = None,
+        set_active: bool = False,
+    ) -> tuple[bool, str]:
+        """Save AI engine configuration for a provider and model, optionally saving the API key."""
+        provider_norm = provider.strip().lower()
+        model_name_clean = model_name.strip()
+        if not model_name_clean:
+            return False, "Model name cannot be empty."
+
+        provider_env_map = {
+            "openai": "OPENAI_API_KEY",
+            "anthropic": "ANTHROPIC_API_KEY",
+            "gemini": "GEMINI_API_KEY",
+            "groq": "GROQ_API_KEY",
+            "deepseek": "DEEPSEEK_API_KEY",
+            "openrouter": "OPENROUTER_API_KEY",
+        }
+
+        # 1. Save API key if provided
+        if api_key and api_key.strip():
+            env_var = provider_env_map.get(provider_norm)
+            if env_var:
+                ok, msg = self.save_api_keys({env_var: api_key.strip()})
+                if not ok:
+                    return False, f"Failed to save API key: {msg}"
+
+        # 2. Record custom model in saved_models.json
+        saved = self._read_saved_custom_models()
+        existing = next((m for m in saved if m.get("id") == model_name_clean and m.get("provider") == provider_norm), None)
+        if not existing:
+            saved.append({
+                "id": model_name_clean,
+                "name": model_name_clean,
+                "provider": provider_norm,
+                "type": "local" if provider_norm == "ollama" else "cloud",
+                "custom": True,
+                "updated_at": time.time(),
+            })
+            self._write_saved_custom_models(saved)
+
+        # 3. If set_active, switch active model
+        if set_active:
+            self._current_model = model_name_clean
+            self._current_provider = provider_norm
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    asyncio.create_task(self.switch_model(model_name_clean))
+            except Exception:
+                pass
+
+        return True, f"Configured {model_name_clean} ({provider_norm}) successfully!"
+
+    def clear_provider_key(self, provider: str) -> tuple[bool, str]:
+        """Clear a provider's API key from ~/.hermclaw/.env and os.environ."""
+        provider_env_map = {
+            "openai": ["OPENAI_API_KEY"],
+            "anthropic": ["ANTHROPIC_API_KEY"],
+            "gemini": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+            "groq": ["GROQ_API_KEY"],
+            "deepseek": ["DEEPSEEK_API_KEY"],
+            "openrouter": ["OPENROUTER_API_KEY"],
+        }
+        keys_to_clear = provider_env_map.get(provider.strip().lower(), [])
+        if not keys_to_clear:
+            return False, f"Unknown provider '{provider}'"
+
+        env_file = hermclaw_home() / ".env"
+        if env_file.exists():
+            try:
+                lines = env_file.read_text(encoding="utf-8").splitlines()
+                kept = []
+                for line in lines:
+                    stripped = line.strip()
+                    if stripped and not stripped.startswith("#") and "=" in stripped:
+                        k, _, _ = stripped.partition("=")
+                        if k.strip() in keys_to_clear:
+                            continue
+                    kept.append(line)
+                env_file.write_text("\n".join(kept) + "\n", encoding="utf-8")
+            except Exception as exc:
+                return False, f"Failed to modify .env: {exc}"
+
+        for k in keys_to_clear:
+            os.environ.pop(k, None)
+
+        return True, f"Cleared API key for {provider}"
+
+    def delete_saved_model(self, provider: str, model_name: str) -> tuple[bool, str]:
+        """Remove a custom saved model from ~/.hermclaw/saved_models.json."""
+        saved = self._read_saved_custom_models()
+        filtered = [m for m in saved if not (m.get("id") == model_name and m.get("provider") == provider.lower())]
+        self._write_saved_custom_models(filtered)
+        return True, f"Removed model {model_name}"
+
+    async def get_saved_models_list(self) -> list[dict[str, Any]]:
+        """Return full list of saved/available models with active status, key preview, and edit metadata."""
+        all_models = await self.get_available_models()
+        config_res = load_config(self.config_path)
+        active_model = getattr(self, "_current_model", None) or (config_res.config.brain.model.model_name if config_res.config else "gemma4:12b")
+
+        status_list = self.get_api_keys_status()
+        status_map = {s["id"]: s for s in status_list}
+        custom_saved = self._read_saved_custom_models()
+        custom_keys = {(m.get("provider"), m.get("id")) for m in custom_saved}
+
+        result = []
+        for m in all_models:
+            mid = m["id"]
+            prov = m.get("provider", "other")
+            is_cloud = m.get("type") == "cloud"
+            prov_status = status_map.get(prov, {})
+
+            key_preview = "Local (Ollama)" if not is_cloud else (
+                prov_status.get("preview") or "Host Environment Variable"
+            )
+
+            result.append({
+                "id": mid,
+                "name": m.get("name", mid),
+                "provider": prov,
+                "provider_name": prov_status.get("name", prov.title()),
+                "type": "cloud" if is_cloud else "local",
+                "tag": m.get("tag", "[Cloud]" if is_cloud else "[Local]"),
+                "display_label": m.get("display_label", f"{mid} [{prov}]"),
+                "configured": True,
+                "key_preview": key_preview,
+                "is_active": (mid == active_model),
+                "context": m.get("context", "128k"),
+                "can_delete": (prov, mid) in custom_keys,
+            })
+        return result
+
     async def get_available_models(self) -> list[dict[str, Any]]:
         """Return a unified list of available local and cloud models with local/cloud tagging."""
         models: list[dict[str, Any]] = []
@@ -311,7 +471,11 @@ class DashboardService:
         config_res = load_config(self.config_path)
         active_model = getattr(self, "_current_model", None) or (config_res.config.brain.model.model_name if config_res.config else "gemma4:12b")
         active_provider = getattr(self, "_current_provider", None) or (config_res.config.brain.model.provider if config_res.config else "openai_compat")
-        if not any(m["id"] == active_model for m in models) and active_provider in ("openai_compat", "ollama"):
+        is_cloud_active = (
+            any(cm["id"] == active_model for cp in CLOUD_PROVIDERS for cm in cp["models"])
+            or getattr(self, "_current_provider", None) in [cp["id"] for cp in CLOUD_PROVIDERS]
+        )
+        if not is_cloud_active and not any(m["id"] == active_model for m in models) and active_provider in ("openai_compat", "ollama"):
             models.insert(0, {
                 "id": active_model,
                 "name": active_model,
@@ -340,6 +504,26 @@ class DashboardService:
                         "available": True,
                         "context": cm.get("context", "128k"),
                     })
+
+        # 3. Custom models saved by user
+        custom_saved = self._read_saved_custom_models()
+        for cm in custom_saved:
+            cid = cm.get("id")
+            cprov = cm.get("provider", "other")
+            if not any(m["id"] == cid for m in models):
+                cp_meta = next((cp for cp in CLOUD_PROVIDERS if cp["id"] == cprov), None)
+                pname = cp_meta["name"] if cp_meta else cprov.title()
+                is_cloud = cm.get("type") == "cloud" or cprov != "ollama"
+                models.append({
+                    "id": cid,
+                    "name": cm.get("name", cid),
+                    "type": "cloud" if is_cloud else "local",
+                    "provider": cprov,
+                    "tag": f"[Cloud - {pname}]" if is_cloud else "[Local]",
+                    "display_label": f"{cid} [Cloud - {pname}]" if is_cloud else f"{cid} [Local]",
+                    "available": True,
+                    "context": cm.get("context", "128k"),
+                })
 
         return models
 

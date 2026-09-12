@@ -32,6 +32,22 @@ class ApiKeysSaveRequest(BaseModel):
     keys: dict[str, str]
 
 
+class EngineConfigSaveRequest(BaseModel):
+    provider: str
+    model_name: str
+    api_key: Optional[str] = None
+    set_active: bool = False
+
+
+class DeleteModelRequest(BaseModel):
+    provider: str
+    model_name: str
+
+
+class ClearKeyRequest(BaseModel):
+    provider: str
+
+
 class CreateSessionRequest(BaseModel):
     title: Optional[str] = None
 
@@ -185,6 +201,36 @@ def create_dashboard_app(
             return await svc.switch_model(req.model)
         except Exception as exc:
             raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/api/engine/save")
+    async def save_engine_config(req: EngineConfigSaveRequest) -> dict[str, Any]:
+        ok, msg = svc.save_engine_config(
+            provider=req.provider,
+            model_name=req.model_name,
+            api_key=req.api_key,
+            set_active=req.set_active,
+        )
+        if not ok:
+            raise HTTPException(status_code=400, detail=msg)
+        return {"success": True, "message": msg}
+
+    @app.get("/api/engine/saved-models")
+    async def get_engine_saved_models() -> list[dict[str, Any]]:
+        return await svc.get_saved_models_list()
+
+    @app.post("/api/engine/clear-key")
+    async def clear_engine_key(req: ClearKeyRequest) -> dict[str, Any]:
+        ok, msg = svc.clear_provider_key(req.provider)
+        if not ok:
+            raise HTTPException(status_code=400, detail=msg)
+        return {"success": True, "message": msg}
+
+    @app.post("/api/engine/delete-model")
+    async def delete_engine_model(req: DeleteModelRequest) -> dict[str, Any]:
+        ok, msg = svc.delete_saved_model(req.provider, req.model_name)
+        if not ok:
+            raise HTTPException(status_code=400, detail=msg)
+        return {"success": True, "message": msg}
 
     # ------------------------------------------------------------------
     # Chat & Sessions API

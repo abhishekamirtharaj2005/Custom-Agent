@@ -165,3 +165,45 @@ async def test_switch_model_validation(tmp_path: Path, monkeypatch):
     assert res["success"] is True
     assert res["model_name"] == "gemma4:12b"
 
+
+@pytest.mark.live
+def test_ai_engine_config_and_saved_models(tmp_path: Path, monkeypatch):
+    """Test AI Engine Config card save, saved models list, and model edit/switch."""
+    monkeypatch.setattr("hermclaw.dashboard.service.hermclaw_home", lambda: tmp_path)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    app = create_dashboard_app()
+    client = TestClient(app)
+
+    # 1. Initially saved models
+    res = client.get("/api/engine/saved-models")
+    assert res.status_code == 200
+    init_models = res.json()
+    assert isinstance(init_models, list)
+
+    # 2. Save Engine Config for OpenAI gpt-4o-mini
+    res_save = client.post("/api/engine/save", json={
+        "provider": "openai",
+        "model_name": "gpt-4o-mini",
+        "api_key": "sk-proj-testkey987654",
+        "set_active": True,
+    })
+    assert res_save.status_code == 200
+    assert res_save.json()["success"] is True
+
+    # 3. Verify in saved models list
+    res_saved = client.get("/api/engine/saved-models")
+    assert res_saved.status_code == 200
+    saved_list = res_saved.json()
+    found = next((m for m in saved_list if m["id"] == "gpt-4o-mini"), None)
+    assert found is not None
+    assert found["provider"] == "openai"
+    assert found["type"] == "cloud"
+    assert found["is_active"] is True
+    assert "sk-p" in found["key_preview"]
+
+    # 4. Verify in /api/models
+    res_models = client.get("/api/models")
+    assert any(m["id"] == "gpt-4o-mini" for m in res_models.json())
+
+

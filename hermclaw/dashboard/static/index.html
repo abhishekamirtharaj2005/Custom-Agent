@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/dashboard.css?v=2.1.0">
+  <link rel="stylesheet" href="/static/css/dashboard.css?v=2.2.0">
 </head>
 <body class="dark-theme">
   <div id="app-container" class="dashboard-shell">
@@ -716,89 +716,126 @@
           </div>
         </div>
 
-        <!-- Cloud LLM Provider API Keys Card -->
-        <div class="col-card" style="margin-bottom: 1.5rem;">
+        <!-- AI Engine Config Card -->
+        <div class="ai-engine-config-card" id="card-ai-engine-config">
+          <div class="ai-engine-header">
+            <div class="ai-engine-title-wrap">
+              <span class="ai-engine-icon">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#818cf8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="7.5" cy="15.5" r="4.5"/>
+                  <path d="M10.8 12.2L20 3"/>
+                  <path d="M16 7l2 2"/>
+                  <path d="M19 4l2 2"/>
+                </svg>
+              </span>
+              <h3 class="ai-engine-title">AI Engine Config</h3>
+            </div>
+            <div class="ai-engine-header-actions">
+              <span class="badge" id="engine-status-badge">Checking...</span>
+            </div>
+          </div>
+
+          <div id="engine-toast" class="alert-banner hidden"></div>
+
+          <form id="form-ai-engine-config" onsubmit="return false;">
+            <!-- LLM Provider Dropdown -->
+            <div class="engine-field-group">
+              <label class="engine-field-label" for="engine-provider-select">LLM Provider</label>
+              <div class="engine-select-wrapper">
+                <select id="engine-provider-select" class="engine-select">
+                  <option value="openai">OpenAI (Default)</option>
+                  <option value="anthropic">Anthropic Claude</option>
+                  <option value="gemini">Google Gemini</option>
+                  <option value="groq">Groq</option>
+                  <option value="deepseek">DeepSeek</option>
+                  <option value="openrouter">OpenRouter</option>
+                  <option value="ollama">Ollama (Local)</option>
+                </select>
+                <span class="select-chevron">▼</span>
+              </div>
+            </div>
+
+            <!-- Model Name Input -->
+            <div class="engine-field-group">
+              <div class="engine-label-row">
+                <label class="engine-field-label" for="engine-model-input">Model Name</label>
+                <span class="engine-field-subtext" id="engine-model-context-badge">128k context</span>
+              </div>
+              <div class="engine-input-wrapper">
+                <input type="text" id="engine-model-input" class="engine-input font-mono" value="gpt-4o-mini" placeholder="e.g. gpt-4o-mini" list="engine-model-suggestions" autocomplete="off">
+                <datalist id="engine-model-suggestions">
+                  <option value="gpt-4o-mini"></option>
+                  <option value="gpt-4o"></option>
+                  <option value="o1"></option>
+                  <option value="o3-mini"></option>
+                  <option value="gpt-4-turbo"></option>
+                </datalist>
+              </div>
+              <!-- Quick Suggestion Chips -->
+              <div class="engine-chips-row" id="engine-model-chips"></div>
+            </div>
+
+            <!-- Provider API Key (Optional) -->
+            <div class="engine-field-group">
+              <div class="engine-label-row">
+                <label class="engine-field-label" for="engine-key-input">Provider API Key (Optional)</label>
+                <span class="badge badge-not-set" id="engine-key-status-badge">Checking...</span>
+              </div>
+              <div class="engine-input-wrapper">
+                <input type="password" id="engine-key-input" class="engine-input font-mono" placeholder="Leave empty to use host environment variables" autocomplete="off">
+                <button class="btn-toggle-eye" type="button" data-target="engine-key-input" title="Toggle visibility">👁</button>
+              </div>
+              <span class="engine-field-desc">Keys are safely stored in <code>~/.hermclaw/.env</code> and never exposed in cleartext.</span>
+            </div>
+
+            <!-- Action Bar -->
+            <div class="engine-actions-bar">
+              <div class="engine-checkbox-wrap">
+                <input type="checkbox" id="engine-set-active-check" checked>
+                <label for="engine-set-active-check">Set as active model for Agent Chat immediately</label>
+              </div>
+              <div class="engine-buttons-wrap">
+                <button type="button" class="btn btn-ghost btn-sm" id="btn-engine-clear-key" style="display: none;">Clear Stored Key</button>
+                <button type="button" class="btn btn-primary" id="btn-save-engine-config">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                  <span>Save Engine Config</span>
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <!-- Saved Models & Configured Providers Card -->
+        <div class="col-card saved-models-card" id="card-saved-models" style="margin-bottom: 1.5rem;">
           <div class="card-header">
             <div>
-              <h3 class="card-title">🔑 Cloud LLM Provider API Keys</h3>
-              <p class="card-hint">Save API keys for OpenAI, Claude, Gemini, and other cloud providers. Saved models automatically display in the Chat LLM dropdown with <b>[Cloud]</b> tags.</p>
+              <h3 class="card-title">📋 Saved Models & Configured Providers</h3>
+              <p class="card-hint">All active local and cloud models ready for use in Hermclaw. Click <b>Edit</b> to populate and modify settings in the form above.</p>
             </div>
-            <button class="btn btn-sm btn-primary" id="btn-save-api-keys">Save API Keys</button>
+            <div class="saved-models-header-actions">
+              <span class="badge badge-configured" id="saved-models-count-badge">0 Models</span>
+              <button class="btn btn-sm btn-outline" id="btn-refresh-saved-models" title="Refresh saved models list">⟳ Refresh</button>
+            </div>
           </div>
-          <div id="api-keys-toast" class="alert-banner hidden"></div>
-          <div class="api-keys-grid">
-            <!-- OpenAI -->
-            <div class="api-key-item">
-              <div class="api-key-header">
-                <span class="provider-title">OpenAI</span>
-                <span class="badge" id="badge-key-openai">Checking...</span>
-              </div>
-              <div class="api-key-input-wrapper">
-                <input type="password" id="input-key-openai" class="form-control font-mono" placeholder="sk-proj-...">
-                <button class="btn-toggle-eye" type="button" data-target="input-key-openai" title="Toggle visibility">👁</button>
-              </div>
-              <span class="provider-models-hint">GPT-4o, GPT-4o Mini, o1, o3-mini</span>
-            </div>
-            <!-- Anthropic Claude -->
-            <div class="api-key-item">
-              <div class="api-key-header">
-                <span class="provider-title">Anthropic Claude</span>
-                <span class="badge" id="badge-key-anthropic">Checking...</span>
-              </div>
-              <div class="api-key-input-wrapper">
-                <input type="password" id="input-key-anthropic" class="form-control font-mono" placeholder="sk-ant-api03-...">
-                <button class="btn-toggle-eye" type="button" data-target="input-key-anthropic" title="Toggle visibility">👁</button>
-              </div>
-              <span class="provider-models-hint">Claude 3.7 Sonnet, 3.5 Sonnet, 3.5 Haiku</span>
-            </div>
-            <!-- Google Gemini -->
-            <div class="api-key-item">
-              <div class="api-key-header">
-                <span class="provider-title">Google Gemini</span>
-                <span class="badge" id="badge-key-gemini">Checking...</span>
-              </div>
-              <div class="api-key-input-wrapper">
-                <input type="password" id="input-key-gemini" class="form-control font-mono" placeholder="AIzaSy...">
-                <button class="btn-toggle-eye" type="button" data-target="input-key-gemini" title="Toggle visibility">👁</button>
-              </div>
-              <span class="provider-models-hint">Gemini 2.5 Pro, 2.5 Flash, 2.0 Flash</span>
-            </div>
-            <!-- Groq -->
-            <div class="api-key-item">
-              <div class="api-key-header">
-                <span class="provider-title">Groq</span>
-                <span class="badge" id="badge-key-groq">Checking...</span>
-              </div>
-              <div class="api-key-input-wrapper">
-                <input type="password" id="input-key-groq" class="form-control font-mono" placeholder="gsk_...">
-                <button class="btn-toggle-eye" type="button" data-target="input-key-groq" title="Toggle visibility">👁</button>
-              </div>
-              <span class="provider-models-hint">Llama 3.3 70B (High Speed)</span>
-            </div>
-            <!-- DeepSeek -->
-            <div class="api-key-item">
-              <div class="api-key-header">
-                <span class="provider-title">DeepSeek</span>
-                <span class="badge" id="badge-key-deepseek">Checking...</span>
-              </div>
-              <div class="api-key-input-wrapper">
-                <input type="password" id="input-key-deepseek" class="form-control font-mono" placeholder="sk-...">
-                <button class="btn-toggle-eye" type="button" data-target="input-key-deepseek" title="Toggle visibility">👁</button>
-              </div>
-              <span class="provider-models-hint">DeepSeek V3, DeepSeek R1 Reasoner</span>
-            </div>
-            <!-- OpenRouter -->
-            <div class="api-key-item">
-              <div class="api-key-header">
-                <span class="provider-title">OpenRouter</span>
-                <span class="badge" id="badge-key-openrouter">Checking...</span>
-              </div>
-              <div class="api-key-input-wrapper">
-                <input type="password" id="input-key-openrouter" class="form-control font-mono" placeholder="sk-or-v1-...">
-                <button class="btn-toggle-eye" type="button" data-target="input-key-openrouter" title="Toggle visibility">👁</button>
-              </div>
-              <span class="provider-models-hint">OpenRouter Auto & multi-model routing</span>
-            </div>
+
+          <div class="saved-models-table-wrap">
+            <table class="saved-models-table">
+              <thead>
+                <tr>
+                  <th style="width: 100px;">Status</th>
+                  <th>Model Name</th>
+                  <th>Provider</th>
+                  <th>Type</th>
+                  <th>API Key / Auth Source</th>
+                  <th style="text-align: right; width: 190px;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="saved-models-tbody">
+                <tr>
+                  <td colspan="6" class="text-center text-muted" style="padding: 2rem;">Loading saved models...</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
 
@@ -959,6 +996,6 @@
   <div id="toast-container" class="toast-stack"></div>
 
   <!-- Core Dashboard Application Script -->
-  <script src="/static/js/dashboard.js?v=2.1.0"></script>
+  <script src="/static/js/dashboard.js?v=2.2.0"></script>
 </body>
 </html>

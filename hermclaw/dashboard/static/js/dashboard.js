@@ -114,7 +114,7 @@ function switchTab(tabId) {
   else if (tabId === 'tasks') { loadKanban(); loadTodos(); loadGoals(); }
   else if (tabId === 'tools') loadToolsCatalog();
   else if (tabId === 'pet') { loadPet(); loadAchievements(); }
-  else if (tabId === 'diagnostics') { loadDiagnostics(); loadRawConfig(); loadApiKeysSettings(); }
+  else if (tabId === 'diagnostics') { loadDiagnostics(); loadRawConfig(); loadEngineConfig(); loadSavedModels(); }
 }
 
 // Toast Notifications
@@ -1461,98 +1461,396 @@ async function loadRawConfig() {
   } catch (err) {}
 }
 
-async function loadApiKeysSettings() {
+// ==========================================================================
+// 9. AI Engine Config & Saved Models Management
+// ==========================================================================
+
+const ENGINE_PROVIDERS = {
+  openai: {
+    id: 'openai',
+    name: 'OpenAI (Default)',
+    defaultModel: 'gpt-4o-mini',
+    context: '128k context',
+    models: ['gpt-4o-mini', 'gpt-4o', 'o3-mini', 'o1', 'gpt-4-turbo'],
+    placeholder: 'sk-proj-...',
+    envKey: 'OPENAI_API_KEY',
+  },
+  anthropic: {
+    id: 'anthropic',
+    name: 'Anthropic Claude',
+    defaultModel: 'claude-3-7-sonnet-latest',
+    context: '200k context',
+    models: ['claude-3-7-sonnet-latest', 'claude-3-5-sonnet-latest', 'claude-3-5-haiku-latest', 'claude-sonnet-4-20250514'],
+    placeholder: 'sk-ant-api03-...',
+    envKey: 'ANTHROPIC_API_KEY',
+  },
+  gemini: {
+    id: 'gemini',
+    name: 'Google Gemini',
+    defaultModel: 'gemini-2.5-flash',
+    context: '1M context',
+    models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-pro'],
+    placeholder: 'AIzaSy...',
+    envKey: 'GEMINI_API_KEY',
+  },
+  groq: {
+    id: 'groq',
+    name: 'Groq',
+    defaultModel: 'llama-3.3-70b-versatile',
+    context: '128k context',
+    models: ['llama-3.3-70b-versatile'],
+    placeholder: 'gsk_...',
+    envKey: 'GROQ_API_KEY',
+  },
+  deepseek: {
+    id: 'deepseek',
+    name: 'DeepSeek',
+    defaultModel: 'deepseek-chat',
+    context: '64k context',
+    models: ['deepseek-chat', 'deepseek-reasoner'],
+    placeholder: 'sk-...',
+    envKey: 'DEEPSEEK_API_KEY',
+  },
+  openrouter: {
+    id: 'openrouter',
+    name: 'OpenRouter',
+    defaultModel: 'openrouter/auto',
+    context: '128k context',
+    models: ['openrouter/auto'],
+    placeholder: 'sk-or-v1-...',
+    envKey: 'OPENROUTER_API_KEY',
+  },
+  ollama: {
+    id: 'ollama',
+    name: 'Ollama (Local)',
+    defaultModel: 'gemma4:12b',
+    context: 'Local service',
+    models: ['gemma4:12b', 'llama3.1:8b', 'qwen2.5:14b', 'deepseek-r1:14b'],
+    placeholder: 'Local service - no API key needed',
+    envKey: '',
+  },
+};
+
+let cachedKeysStatus = [];
+
+async function loadEngineConfig() {
   try {
     const res = await fetch('/api/settings/keys');
     if (!res.ok) return;
-    const providers = await res.json();
-    providers.forEach(p => {
-      const badge = document.getElementById(`badge-key-${p.id}`);
-      const input = document.getElementById(`input-key-${p.id}`);
-      if (badge) {
-        if (p.configured) {
-          badge.className = 'badge-configured';
-          badge.textContent = `✓ Configured (${p.preview})`;
-        } else {
-          badge.className = 'badge-not-set';
-          badge.textContent = 'Not Set';
-        }
-      }
-      if (input) {
-        input.placeholder = p.configured ? `Configured (${p.preview}) - enter new to change` : p.placeholder;
-      }
-    });
+    cachedKeysStatus = await res.json();
+    updateEngineProviderUI(false);
   } catch (err) {
-    console.error('Failed to load API keys status:', err);
+    console.error('Failed to load engine config:', err);
   }
 }
 
-async function saveApiKeysSettings() {
-  const btn = document.getElementById('btn-save-api-keys');
-  const toast = document.getElementById('api-keys-toast');
-  const originalText = btn ? btn.textContent : 'Save API Keys';
-  if (btn) {
-    btn.textContent = 'Saving...';
-    btn.disabled = true;
+function updateEngineProviderUI(resetModel = true) {
+  const providerSelect = document.getElementById('engine-provider-select');
+  if (!providerSelect) return;
+  const provId = providerSelect.value || 'openai';
+  const meta = ENGINE_PROVIDERS[provId] || ENGINE_PROVIDERS.openai;
+
+  // 1. Model input & suggestions
+  const modelInput = document.getElementById('engine-model-input');
+  if (modelInput && (resetModel || !modelInput.value)) {
+    modelInput.value = meta.defaultModel;
+  }
+  const contextBadge = document.getElementById('engine-model-context-badge');
+  if (contextBadge) contextBadge.textContent = meta.context;
+
+  // Datalist suggestions
+  const datalist = document.getElementById('engine-model-suggestions');
+  if (datalist) {
+    datalist.innerHTML = meta.models.map(m => `<option value="${escapeHtml(m)}"></option>`).join('');
   }
 
-  const payload = {};
-  const mapping = {
-    openai: 'OPENAI_API_KEY',
-    anthropic: 'ANTHROPIC_API_KEY',
-    gemini: 'GEMINI_API_KEY',
-    groq: 'GROQ_API_KEY',
-    deepseek: 'DEEPSEEK_API_KEY',
-    openrouter: 'OPENROUTER_API_KEY',
-  };
+  // Quick Chips
+  const chipsContainer = document.getElementById('engine-model-chips');
+  if (chipsContainer) {
+    chipsContainer.innerHTML = meta.models.map(m => `
+      <button type="button" class="engine-chip" onclick="selectModelChip('${escapeHtml(m)}')">${escapeHtml(m)}</button>
+    `).join('');
+  }
 
-  Object.entries(mapping).forEach(([id, envKey]) => {
-    const input = document.getElementById(`input-key-${id}`);
-    if (input && input.value.trim()) {
-      payload[envKey] = input.value.trim();
+  // 2. Key status & placeholder
+  const keyStatusBadge = document.getElementById('engine-key-status-badge');
+  const keyInput = document.getElementById('engine-key-input');
+  const clearKeyBtn = document.getElementById('btn-engine-clear-key');
+
+  if (provId === 'ollama') {
+    if (keyStatusBadge) {
+      keyStatusBadge.className = 'badge badge-ready';
+      keyStatusBadge.textContent = 'Local Ollama Service';
     }
-  });
+    if (keyInput) {
+      keyInput.placeholder = 'Local service - no API key needed';
+      keyInput.disabled = true;
+    }
+    if (clearKeyBtn) clearKeyBtn.style.display = 'none';
+  } else {
+    if (keyInput) keyInput.disabled = false;
+    const provStatus = cachedKeysStatus.find(p => p.id === provId);
+    if (provStatus && provStatus.configured) {
+      if (keyStatusBadge) {
+        keyStatusBadge.className = 'badge-configured';
+        keyStatusBadge.textContent = `✓ Configured (${provStatus.preview})`;
+      }
+      if (keyInput) {
+        keyInput.placeholder = `Configured (${provStatus.preview}) - enter new key to replace`;
+      }
+      if (clearKeyBtn) clearKeyBtn.style.display = 'inline-block';
+    } else {
+      if (keyStatusBadge) {
+        keyStatusBadge.className = 'badge-not-set';
+        keyStatusBadge.textContent = 'Not Set';
+      }
+      if (keyInput) {
+        keyInput.placeholder = 'Leave empty to use host environment variables';
+      }
+      if (clearKeyBtn) clearKeyBtn.style.display = 'none';
+    }
+  }
+}
+
+function selectModelChip(modelName) {
+  const modelInput = document.getElementById('engine-model-input');
+  if (modelInput) {
+    modelInput.value = modelName;
+    modelInput.focus();
+  }
+}
+
+async function saveEngineConfig() {
+  const btn = document.getElementById('btn-save-engine-config');
+  const toast = document.getElementById('engine-toast');
+  const originalHtml = btn ? btn.innerHTML : 'Save Engine Config';
+
+  const provider = document.getElementById('engine-provider-select')?.value || 'openai';
+  const model_name = document.getElementById('engine-model-input')?.value?.trim() || '';
+  const api_key = document.getElementById('engine-key-input')?.value?.trim() || undefined;
+  const set_active = document.getElementById('engine-set-active-check')?.checked || false;
+
+  if (!model_name) {
+    showToast('Please enter a model name.', 'error');
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+  }
 
   try {
-    const res = await fetch('/api/settings/keys', {
+    const res = await fetch('/api/engine/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ keys: payload }),
+      body: JSON.stringify({ provider, model_name, api_key, set_active }),
     });
     const data = await res.json();
     if (res.ok) {
-      showToast('Cloud LLM API keys saved! Models unlocked in chat.', 'success');
+      showToast(`AI Engine configured: ${model_name} ready!`, 'success');
       if (toast) {
         toast.className = 'alert-banner success';
-        toast.textContent = '✓ Cloud LLM API keys saved successfully. Associated models are now unlocked in the Chat LLM dropdown.';
+        toast.textContent = `✓ ${data.message || 'Saved successfully!'}`;
         toast.classList.remove('hidden');
         setTimeout(() => toast.classList.add('hidden'), 5000);
       }
-      // Clear entered values for security
-      Object.keys(mapping).forEach(id => {
-        const input = document.getElementById(`input-key-${id}`);
-        if (input) input.value = '';
-      });
-      // Refresh status and model dropdown
-      await loadApiKeysSettings();
+      const keyInput = document.getElementById('engine-key-input');
+      if (keyInput) keyInput.value = '';
+
+      await loadEngineConfig();
+      await loadSavedModels();
       await loadOverview();
+      const modelsRes = await fetch('/api/models');
+      if (modelsRes.ok) {
+        const models = await modelsRes.json();
+        populateModelDropdown(models);
+      }
     } else {
-      showToast(`Error: ${data.detail || 'Could not save keys'}`, 'error');
+      showToast(`Error: ${data.detail || 'Could not save engine config'}`, 'error');
       if (toast) {
         toast.className = 'alert-banner error';
-        toast.textContent = `Error saving API keys: ${data.detail || 'Unknown error'}`;
+        toast.textContent = `Error: ${data.detail || 'Unknown error'}`;
         toast.classList.remove('hidden');
       }
     }
   } catch (err) {
-    showToast('Failed to save API keys', 'error');
+    showToast('Failed to connect to dashboard API', 'error');
   } finally {
     if (btn) {
-      btn.textContent = originalText;
       btn.disabled = false;
+      btn.innerHTML = originalHtml;
     }
   }
 }
+
+async function loadSavedModels() {
+  const tbody = document.getElementById('saved-models-tbody');
+  const countBadge = document.getElementById('saved-models-count-badge');
+  if (!tbody) return;
+
+  try {
+    const res = await fetch('/api/engine/saved-models');
+    if (!res.ok) return;
+    const models = await res.json();
+
+    if (countBadge) {
+      countBadge.textContent = `${models.length} Models Available`;
+    }
+
+    if (models.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="6" class="text-center text-muted" style="padding: 2rem;">
+            No saved models found. Configure your first model above!
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    tbody.innerHTML = models.map(m => {
+      const activeBadge = m.is_active
+        ? '<span class="badge-active-pill"><span class="pulse-indicator online" style="width:7px;height:7px;"></span>Active</span>'
+        : '<span class="badge-ready">Ready</span>';
+
+      const typePill = m.type === 'cloud'
+        ? '<span class="type-pill cloud">Cloud</span>'
+        : '<span class="type-pill local">Local</span>';
+
+      const providerBadge = `<span class="provider-tag ${escapeHtml(m.provider)}">${escapeHtml(m.provider_name)}</span>`;
+
+      const deleteBtn = m.can_delete
+        ? `<button type="button" class="btn btn-xs btn-danger-ghost" title="Remove custom model" onclick="deleteSavedModel('${escapeHtml(m.provider)}', '${escapeHtml(m.id)}')">✕</button>`
+        : '';
+
+      const activateBtn = !m.is_active
+        ? `<button type="button" class="btn btn-xs btn-primary" onclick="activateSavedModel('${escapeHtml(m.id)}')">⚡ Use Now</button>`
+        : `<button type="button" class="btn btn-xs btn-ghost" disabled>In Use</button>`;
+
+      return `
+        <tr>
+          <td>${activeBadge}</td>
+          <td>
+            <div style="font-weight:600; font-family:'JetBrains Mono', monospace; font-size:0.9rem; color:#fff;">${escapeHtml(m.id)}</div>
+            <div class="text-dim text-xs">${escapeHtml(m.name !== m.id ? m.name : m.context || '')}</div>
+          </td>
+          <td>${providerBadge}</td>
+          <td>${typePill}</td>
+          <td class="text-dim text-xs font-mono">${escapeHtml(m.key_preview)}</td>
+          <td>
+            <div class="saved-model-actions">
+              <button type="button" class="btn btn-xs btn-outline" onclick="editSavedModel('${escapeHtml(m.provider)}', '${escapeHtml(m.id)}')">✏️ Edit</button>
+              ${activateBtn}
+              ${deleteBtn}
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">Failed to load saved models.</td></tr>`;
+  }
+}
+
+function editSavedModel(provider, modelName) {
+  const providerSelect = document.getElementById('engine-provider-select');
+  const modelInput = document.getElementById('engine-model-input');
+  const card = document.getElementById('card-ai-engine-config');
+
+  if (providerSelect) {
+    providerSelect.value = provider;
+    updateEngineProviderUI(false);
+  }
+  if (modelInput) {
+    modelInput.value = modelName;
+  }
+
+  if (card) {
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.classList.add('engine-edit-pulse');
+    setTimeout(() => card.classList.remove('engine-edit-pulse'), 1500);
+  }
+
+  const keyInput = document.getElementById('engine-key-input');
+  if (keyInput) keyInput.focus();
+
+  showToast(`Loaded ${modelName} into AI Engine Config editor.`, 'info');
+}
+
+async function activateSavedModel(modelName) {
+  try {
+    const res = await fetch('/api/chat/switch-model', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: modelName }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      showToast(`Switched active model to ${modelName}`, 'success');
+      const badge = document.getElementById('sidebar-model-badge');
+      if (badge) badge.textContent = modelName;
+      const ov = document.getElementById('overview-model-name');
+      if (ov) ov.textContent = modelName;
+      await loadSavedModels();
+    } else {
+      showToast(`Failed to switch model: ${data.detail || 'Error'}`, 'error');
+    }
+  } catch (err) {
+    showToast('Error switching model', 'error');
+  }
+}
+
+async function deleteSavedModel(provider, modelName) {
+  if (!confirm(`Remove custom model '${modelName}' from saved list?`)) return;
+  try {
+    const res = await fetch('/api/engine/delete-model', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider, model_name: modelName }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      showToast(`Removed model ${modelName}`, 'info');
+      await loadSavedModels();
+      const mRes = await fetch('/api/models');
+      if (mRes.ok) populateModelDropdown(await mRes.json());
+    } else {
+      showToast(data.detail || 'Error removing model', 'error');
+    }
+  } catch (err) {
+    showToast('Failed to remove model', 'error');
+  }
+}
+
+async function clearStoredKey() {
+  const provider = document.getElementById('engine-provider-select')?.value || 'openai';
+  if (!confirm(`Clear stored API key for provider '${provider}'?`)) return;
+  try {
+    const res = await fetch('/api/engine/clear-key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      showToast(`Cleared API key for ${provider}`, 'success');
+      await loadEngineConfig();
+      await loadSavedModels();
+      const mRes = await fetch('/api/models');
+      if (mRes.ok) populateModelDropdown(await mRes.json());
+    } else {
+      showToast(data.detail || 'Error clearing key', 'error');
+    }
+  } catch (err) {
+    showToast('Failed to clear key', 'error');
+  }
+}
+
+window.editSavedModel = editSavedModel;
+window.activateSavedModel = activateSavedModel;
+window.deleteSavedModel = deleteSavedModel;
+window.selectModelChip = selectModelChip;
 
 function populateModelDropdown(models, currentModel) {
   const modelSelect = document.getElementById('chat-model-select');
@@ -1654,8 +1952,22 @@ function setupDiagnosticsHandlers() {
     }
   });
 
-  // Save API keys button
-  document.getElementById('btn-save-api-keys')?.addEventListener('click', saveApiKeysSettings);
+  // Provider change listener
+  document.getElementById('engine-provider-select')?.addEventListener('change', () => {
+    updateEngineProviderUI(true);
+  });
+
+  // Save Engine Config button
+  document.getElementById('btn-save-engine-config')?.addEventListener('click', saveEngineConfig);
+
+  // Clear Stored Key button
+  document.getElementById('btn-engine-clear-key')?.addEventListener('click', clearStoredKey);
+
+  // Refresh saved models list
+  document.getElementById('btn-refresh-saved-models')?.addEventListener('click', async () => {
+    showToast('Refreshing saved models...', 'info');
+    await loadSavedModels();
+  });
 
   // Eye toggles for password visibility
   document.querySelectorAll('.btn-toggle-eye').forEach(btn => {
@@ -1673,8 +1985,9 @@ function setupDiagnosticsHandlers() {
     });
   });
 
-  // Initial load of API keys status
-  loadApiKeysSettings();
+  // Initial load of AI engine config and saved models
+  loadEngineConfig();
+  loadSavedModels();
 }
 
 
