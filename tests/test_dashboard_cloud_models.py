@@ -207,3 +207,83 @@ def test_ai_engine_config_and_saved_models(tmp_path: Path, monkeypatch):
     assert any(m["id"] == "gpt-4o-mini" for m in res_models.json())
 
 
+@pytest.mark.live
+@pytest.mark.asyncio
+async def test_gemini_cloud_model_classification_and_switch(tmp_path: Path, monkeypatch):
+    """Test that any Gemini model is strictly tagged as Cloud with Google Gemini provider, not Local."""
+    monkeypatch.setattr("hermclaw.dashboard.service.hermclaw_home", lambda: tmp_path)
+    monkeypatch.setenv("GEMINI_API_KEY", "AIzaSy_fake_test_gemini_key_12345")
+
+    svc = DashboardService()
+    # Save a custom gemini model (e.g. gemini-3.8-flash)
+    ok, msg = svc.save_engine_config(
+        provider="gemini",
+        model_name="gemini-3.8-flash",
+        api_key="AIzaSy_fake_test_gemini_key_12345",
+        set_active=True,
+    )
+    assert ok is True
+
+    # 1. Available models check
+    models = await svc.get_available_models()
+    gemini_m = next((m for m in models if m["id"] == "gemini-3.8-flash"), None)
+    assert gemini_m is not None
+    assert gemini_m["type"] == "cloud"
+    assert gemini_m["provider"] == "gemini"
+    assert gemini_m["tag"] == "[Cloud - Google Gemini]"
+    assert "[Cloud - Google Gemini]" in gemini_m["display_label"]
+    assert "[Local]" not in gemini_m["display_label"]
+
+    # 2. Saved models list check
+    saved = await svc.get_saved_models_list()
+    saved_gemini = next((m for m in saved if m["id"] == "gemini-3.8-flash"), None)
+    assert saved_gemini is not None
+    assert saved_gemini["type"] == "cloud"
+    assert saved_gemini["provider"] == "gemini"
+    assert saved_gemini["provider_name"] == "Google Gemini"
+    assert saved_gemini["tag"] == "[Cloud - Google Gemini]"
+
+    # 3. Model switch check
+    res_switch = await svc.switch_model("gemini-3.8-flash")
+    assert res_switch["success"] is True
+    assert res_switch["model_name"] == "gemini-3.8-flash"
+    assert res_switch["provider"] == "gemini"
+    assert svc._current_provider == "gemini"
+    assert svc._current_model == "gemini-3.8-flash"
+
+    # Runtime transport should be GeminiTransport
+    runtime = await svc.get_runtime()
+    from hermclaw.brain.transports.gemini import GeminiTransport
+    assert isinstance(runtime.agent.transport, GeminiTransport)
+
+
+@pytest.mark.live
+@pytest.mark.asyncio
+async def test_send_message_transport_error_surfaced(tmp_path: Path, monkeypatch):
+    """Test that transport errors return informative error messages instead of empty responses."""
+    monkeypatch.setattr("hermclaw.dashboard.service.hermclaw_home", lambda: tmp_path)
+    monkeypatch.setenv("GEMINI_API_KEY", "fake_key")
+
+    svc = DashboardService()
+    await svc.switch_model("gemini-3.8-flash", provider="gemini")
+    sid = await svc.create_session("Test Error Session")
+
+    runtime = await svc.get_runtime()
+
+    # Mock agent.run_turn to raise TransportError
+    from hermclaw.brain.transports.base import TransportError
+    async def mock_run_turn(*args, **kwargs):
+        raise TransportError("HTTP 404 from Gemini: models/gemini-3.8-flash not found")
+
+    monkeypatch.setattr(runtime.agent, "run_turn", mock_run_turn)
+
+    # Call send_message
+    res = await svc.send_message(sid, "hello")
+    assert "text" in res
+    assert "⚠️ **Agent Error:**" in res["text"]
+    assert "models/gemini-3.8-flash not found" in res["text"]
+    assert "Tip:" in res["text"]
+    assert res["text"] != "(empty response)"
+
+
+

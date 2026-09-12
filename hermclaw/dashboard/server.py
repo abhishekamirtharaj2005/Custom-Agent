@@ -26,6 +26,7 @@ class ChatRequest(BaseModel):
 
 class SwitchModelRequest(BaseModel):
     model: str
+    provider: Optional[str] = None
 
 
 class ApiKeysSaveRequest(BaseModel):
@@ -198,7 +199,7 @@ def create_dashboard_app(
     @app.post("/api/chat/switch-model")
     async def switch_model(req: SwitchModelRequest) -> dict[str, Any]:
         try:
-            return await svc.switch_model(req.model)
+            return await svc.switch_model(req.model, provider=req.provider)
         except Exception as exc:
             raise HTTPException(status_code=400, detail=str(exc))
 

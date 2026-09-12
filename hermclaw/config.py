@@ -158,7 +158,7 @@ class FallbackModelConfig(BaseModel):
     its own nested fallback list, to keep the schema non-recursive."""
 
     model_config = ConfigDict(extra="forbid")
-    provider: Literal["anthropic", "openai_compat", "bedrock"] = "anthropic"
+    provider: Literal["anthropic", "openai_compat", "bedrock", "gemini"] = "anthropic"
     model_name: str
     api_key_env: str
     api_base_env: Optional[str] = None
@@ -167,7 +167,7 @@ class FallbackModelConfig(BaseModel):
 
 class ModelConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    provider: Literal["anthropic", "openai_compat", "bedrock"] = "openai_compat"
+    provider: Literal["anthropic", "openai_compat", "bedrock", "gemini"] = "openai_compat"
     model_name: str = "gemma4:12b"
     api_key_env: str = "OLLAMA_API_KEY"
     api_base_env: Optional[str] = "OLLAMA_API_BASE"

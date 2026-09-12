@@ -150,6 +150,34 @@ _BUILTIN_MODELS: list[ModelInfo] = [
 
     # --- Google ---
     ModelInfo(
+        name="gemini-3.8-flash", provider="gemini",
+        context_window=1_000_000, max_output_tokens=65_536,
+        supports_vision=True, description="Google Gemini 3.8 Flash (High Speed)",
+        aliases=["gemini-3.8", "gemini-3.8-flash"],
+        input_cost_per_1m=0.15, output_cost_per_1m=0.60,
+    ),
+    ModelInfo(
+        name="gemini-3.5-flash", provider="gemini",
+        context_window=1_000_000, max_output_tokens=65_536,
+        supports_vision=True, description="Google Gemini 3.5 Flash",
+        aliases=["gemini-3.5", "gemini-3.5-flash"],
+        input_cost_per_1m=0.15, output_cost_per_1m=0.60,
+    ),
+    ModelInfo(
+        name="gemini-3-flash-preview", provider="gemini",
+        context_window=1_000_000, max_output_tokens=65_536,
+        supports_vision=True, description="Google Gemini 3 Flash Preview",
+        aliases=["gemini-3-flash", "gemini-3"],
+        input_cost_per_1m=0.15, output_cost_per_1m=0.60,
+    ),
+    ModelInfo(
+        name="gemini-flash-latest", provider="gemini",
+        context_window=1_000_000, max_output_tokens=65_536,
+        supports_vision=True, description="Google Gemini Flash Latest",
+        aliases=["flash-latest"],
+        input_cost_per_1m=0.15, output_cost_per_1m=0.60,
+    ),
+    ModelInfo(
         name="gemini-2.5-pro", provider="gemini",
         context_window=1_000_000, max_output_tokens=65_536,
         supports_vision=True, description="Google Gemini 2.5 Pro",
@@ -169,6 +197,20 @@ _BUILTIN_MODELS: list[ModelInfo] = [
         supports_vision=True, description="Google Gemini 2.0 Flash",
         aliases=["gemini-2", "gemini-2.0"],
         input_cost_per_1m=0.10, output_cost_per_1m=0.40,
+    ),
+    ModelInfo(
+        name="gemini-1.5-flash", provider="gemini",
+        context_window=1_000_000, max_output_tokens=8192,
+        supports_vision=True, description="Google Gemini 1.5 Flash",
+        aliases=["gemini-1.5", "gemini-1.5-flash"],
+        input_cost_per_1m=0.075, output_cost_per_1m=0.30,
+    ),
+    ModelInfo(
+        name="gemini-1.5-pro", provider="gemini",
+        context_window=2_000_000, max_output_tokens=8192,
+        supports_vision=True, description="Google Gemini 1.5 Pro",
+        aliases=["gemini-1.5-pro"],
+        input_cost_per_1m=1.25, output_cost_per_1m=5.00,
     ),
 
     # --- DeepSeek ---
@@ -235,7 +277,7 @@ class ModelCatalog:
             self._aliases[alias.lower()] = model.name
 
     def resolve(self, name_or_alias: str) -> Optional[ModelInfo]:
-        """Look up a model by exact name or alias."""
+        """Look up a model by exact name or alias, with smart dynamic fallbacks for cloud providers."""
         key = name_or_alias.lower().strip()
         if key in self._models:
             return self._models[key]
@@ -246,6 +288,60 @@ class ModelCatalog:
         for model_name, model in self._models.items():
             if key in model_name.lower():
                 return model
+
+        # Dynamic fallback for Gemini models: if it starts with gemini, resolve as Gemini cloud model
+        if key.startswith("gemini") or "gemini" in key:
+            return ModelInfo(
+                name=name_or_alias.strip(),
+                provider="gemini",
+                context_window=1_000_000,
+                max_output_tokens=65_536,
+                description=f"{name_or_alias.strip()} (Google Gemini Cloud)",
+            )
+
+        # Dynamic fallback for Claude models:
+        if key.startswith("claude"):
+            return ModelInfo(
+                name=name_or_alias.strip(),
+                provider="anthropic",
+                context_window=200_000,
+                max_output_tokens=16_384,
+                description=f"{name_or_alias.strip()} (Anthropic Claude Cloud)",
+            )
+
+        # Dynamic fallback for GPT/OpenAI models:
+        if key.startswith(("gpt-", "o1", "o3", "chatgpt")):
+            return ModelInfo(
+                name=name_or_alias.strip(),
+                provider="openai_compat",
+                api_base="https://api.openai.com/v1",
+                context_window=128_000,
+                max_output_tokens=16_384,
+                description=f"{name_or_alias.strip()} (OpenAI Cloud)",
+            )
+
+        # Dynamic fallback for DeepSeek models (without colon):
+        if key.startswith("deepseek") and ":" not in key:
+            return ModelInfo(
+                name=name_or_alias.strip(),
+                provider="openai_compat",
+                api_base="https://api.deepseek.com/v1",
+                context_window=64_000,
+                max_output_tokens=8192,
+                description=f"{name_or_alias.strip()} (DeepSeek Cloud)",
+            )
+
+        # Dynamic fallback for OpenRouter models:
+        if key.startswith("openrouter/"):
+            return ModelInfo(
+                name=name_or_alias.strip(),
+                provider="openai_compat",
+                api_base="https://openrouter.ai/api/v1",
+                context_window=128_000,
+                max_output_tokens=16_384,
+                description=f"{name_or_alias.strip()} (OpenRouter Cloud)",
+            )
+
         return None
 
     def list_all(self) -> list[ModelInfo]:

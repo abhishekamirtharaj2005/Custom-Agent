@@ -438,6 +438,18 @@ function setupChatHandlers() {
       const data = await res.json();
       if (!res.ok) {
         showToast(data.detail || 'Error from agent', 'error');
+        const errRow = document.createElement('div');
+        errRow.className = 'chat-msg-row assistant';
+        errRow.innerHTML = `
+          <div class="msg-avatar assistant">⚠️</div>
+          <div class="msg-bubble" style="border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.08);">
+            <div style="color: #f87171; font-weight: 600; margin-bottom: 0.3rem;">Agent Error</div>
+            <div style="color: #fca5a5; font-size: 0.9rem;">${escapeHtml(data.detail || 'Error from agent')}</div>
+          </div>
+        `;
+        stream.appendChild(errRow);
+        stream.scrollTop = stream.scrollHeight;
+        return;
       }
 
 
@@ -536,11 +548,17 @@ function setupChatHandlers() {
   modelSelect?.addEventListener('change', async () => {
     const newModel = modelSelect.value;
     if (!newModel) return;
+    let provider = undefined;
+    const low = newModel.toLowerCase();
+    if (low.startsWith('gemini')) provider = 'gemini';
+    else if (low.startsWith('claude')) provider = 'anthropic';
+    else if (low.startsWith('gpt-') || low.startsWith('o1') || low.startsWith('o3')) provider = 'openai';
+
     try {
       const res = await fetch('/api/chat/switch-model', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: newModel }),
+        body: JSON.stringify({ model: newModel, provider }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -1487,9 +1505,9 @@ const ENGINE_PROVIDERS = {
   gemini: {
     id: 'gemini',
     name: 'Google Gemini',
-    defaultModel: 'gemini-2.5-flash',
+    defaultModel: 'gemini-3.8-flash',
     context: '1M context',
-    models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-pro'],
+    models: ['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-3-flash-preview', 'gemini-2.5-pro', 'gemini-flash-latest'],
     placeholder: 'AIzaSy...',
     envKey: 'GEMINI_API_KEY',
   },
@@ -1884,6 +1902,22 @@ function populateModelDropdown(models, currentModel) {
     }
 
     if (!id || typeof id !== 'string') return;
+
+    // Strict safety check for well-known cloud prefixes
+    const idLow = id.toLowerCase();
+    if (idLow.startsWith('gemini')) {
+      isCloud = true;
+      provider = 'gemini';
+      label = `${id} [Cloud - Google Gemini]`;
+    } else if (idLow.startsWith('claude')) {
+      isCloud = true;
+      provider = 'anthropic';
+      label = `${id} [Cloud - Anthropic Claude]`;
+    } else if (idLow.startsWith('gpt-') || idLow.startsWith('o1') || idLow.startsWith('o3')) {
+      isCloud = true;
+      provider = 'openai';
+      label = `${id} [Cloud - OpenAI]`;
+    }
 
     if (!isCloud) {
       localModels.push({ id, label });

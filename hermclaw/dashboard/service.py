@@ -86,9 +86,12 @@ CLOUD_PROVIDERS: list[dict[str, Any]] = [
         "alt_env_var": "GOOGLE_API_KEY",
         "placeholder": "AIzaSy...",
         "models": [
-            {"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro (1M Context)", "context": "1M"},
+            {"id": "gemini-3.8-flash", "name": "Gemini 3.8 Flash (Fast & Active)", "context": "1M"},
+            {"id": "gemini-3.5-flash", "name": "Gemini 3.5 Flash", "context": "1M"},
+            {"id": "gemini-3-flash-preview", "name": "Gemini 3 Flash Preview", "context": "1M"},
+            {"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro (Reasoning & Coding)", "context": "1M"},
+            {"id": "gemini-flash-latest", "name": "Gemini Flash Latest", "context": "1M"},
             {"id": "gemini-2.5-flash", "name": "Gemini 2.5 Flash", "context": "1M"},
-            {"id": "gemini-2.0-flash", "name": "Gemini 2.0 Flash", "context": "1M"},
             {"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro", "context": "2M"},
         ],
     },
@@ -133,6 +136,30 @@ class DashboardService:
         self._runtime: Optional[AgentRuntime] = None
         self._runtime_lock = asyncio.Lock()
         self._started_at = time.time()
+        self._ensure_env_loaded()
+
+    def _ensure_env_loaded(self) -> None:
+        """Load variables from ~/.hermclaw/.env into os.environ if not already present."""
+        env_file = hermclaw_home() / ".env"
+        if env_file.exists():
+            try:
+                for line in env_file.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, _, v = line.partition("=")
+                        k = k.strip()
+                        v = v.strip().strip('"').strip("'")
+                        if k and k not in os.environ:
+                            os.environ[k] = v
+            except Exception:
+                pass
+        # Mirror GEMINI_API_KEY <-> GOOGLE_API_KEY
+        g_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        if g_key:
+            if not os.environ.get("GEMINI_API_KEY"):
+                os.environ["GEMINI_API_KEY"] = g_key
+            if not os.environ.get("GOOGLE_API_KEY"):
+                os.environ["GOOGLE_API_KEY"] = g_key
 
     # ------------------------------------------------------------------
     # Runtime & Agent Management
@@ -364,7 +391,7 @@ class DashboardService:
             try:
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
-                    asyncio.create_task(self.switch_model(model_name_clean))
+                    asyncio.create_task(self.switch_model(model_name_clean, provider=provider_norm))
             except Exception:
                 pass
 
@@ -452,6 +479,7 @@ class DashboardService:
 
     async def get_available_models(self) -> list[dict[str, Any]]:
         """Return a unified list of available local and cloud models with local/cloud tagging."""
+        self._ensure_env_loaded()
         models: list[dict[str, Any]] = []
 
         # 1. Local Ollama models
@@ -467,25 +495,6 @@ class DashboardService:
                 "available": True,
             })
 
-        # Fallback local model if Ollama returned empty but active config is local
-        config_res = load_config(self.config_path)
-        active_model = getattr(self, "_current_model", None) or (config_res.config.brain.model.model_name if config_res.config else "gemma4:12b")
-        active_provider = getattr(self, "_current_provider", None) or (config_res.config.brain.model.provider if config_res.config else "openai_compat")
-        is_cloud_active = (
-            any(cm["id"] == active_model for cp in CLOUD_PROVIDERS for cm in cp["models"])
-            or getattr(self, "_current_provider", None) in [cp["id"] for cp in CLOUD_PROVIDERS]
-        )
-        if not is_cloud_active and not any(m["id"] == active_model for m in models) and active_provider in ("openai_compat", "ollama"):
-            models.insert(0, {
-                "id": active_model,
-                "name": active_model,
-                "type": "local",
-                "provider": "ollama",
-                "tag": "[Local]",
-                "display_label": f"{active_model} [Local]",
-                "available": ollama_online,
-            })
-
         # 2. Cloud models for configured providers
         status_list = self.get_api_keys_status()
         status_map = {item["id"]: item["configured"] for item in status_list}
@@ -494,26 +503,46 @@ class DashboardService:
             is_configured = status_map.get(cp["id"], False)
             if is_configured:
                 for cm in cp["models"]:
-                    models.append({
-                        "id": cm["id"],
-                        "name": cm["name"],
-                        "type": "cloud",
-                        "provider": cp["id"],
-                        "tag": f"[Cloud - {cp['name']}]",
-                        "display_label": f"{cm['id']} [Cloud - {cp['name']}]",
-                        "available": True,
-                        "context": cm.get("context", "128k"),
-                    })
+                    if not any(m["id"] == cm["id"] for m in models):
+                        models.append({
+                            "id": cm["id"],
+                            "name": cm["name"],
+                            "type": "cloud",
+                            "provider": cp["id"],
+                            "tag": f"[Cloud - {cp['name']}]",
+                            "display_label": f"{cm['id']} [Cloud - {cp['name']}]",
+                            "available": True,
+                            "context": cm.get("context", "128k"),
+                        })
 
         # 3. Custom models saved by user
         custom_saved = self._read_saved_custom_models()
         for cm in custom_saved:
             cid = cm.get("id")
-            cprov = cm.get("provider", "other")
+            if not cid:
+                continue
+            cprov = (cm.get("provider") or "other").strip().lower()
+
+            # Autodetect provider from name if other/missing
+            cid_low = cid.lower()
+            if cid_low.startswith("gemini") or cprov == "gemini":
+                cprov = "gemini"
+            elif cid_low.startswith("claude") or cprov == "anthropic":
+                cprov = "anthropic"
+            elif cid_low.startswith(("gpt-", "o1", "o3")) or cprov == "openai":
+                cprov = "openai"
+            elif cid_low.startswith("deepseek") or cprov == "deepseek":
+                cprov = "deepseek"
+            elif cprov == "groq":
+                cprov = "groq"
+            elif cprov == "openrouter":
+                cprov = "openrouter"
+
+            cp_meta = next((cp for cp in CLOUD_PROVIDERS if cp["id"] == cprov), None)
+            pname = cp_meta["name"] if cp_meta else cprov.title()
+            is_cloud = cm.get("type") == "cloud" or cprov != "ollama"
+
             if not any(m["id"] == cid for m in models):
-                cp_meta = next((cp for cp in CLOUD_PROVIDERS if cp["id"] == cprov), None)
-                pname = cp_meta["name"] if cp_meta else cprov.title()
-                is_cloud = cm.get("type") == "cloud" or cprov != "ollama"
                 models.append({
                     "id": cid,
                     "name": cm.get("name", cid),
@@ -525,15 +554,144 @@ class DashboardService:
                     "context": cm.get("context", "128k"),
                 })
 
+        # 4. Fallback for currently active model if not already present in list
+        config_res = load_config(self.config_path)
+        active_model = getattr(self, "_current_model", None) or (config_res.config.brain.model.model_name if config_res.config else "gemma4:12b")
+        active_provider = getattr(self, "_current_provider", None) or (config_res.config.brain.model.provider if config_res.config else "openai_compat")
+
+        if not any(m["id"] == active_model for m in models):
+            act_low = active_model.lower()
+            if act_low.startswith("gemini") or active_provider == "gemini":
+                models.insert(0, {
+                    "id": active_model,
+                    "name": active_model,
+                    "type": "cloud",
+                    "provider": "gemini",
+                    "tag": "[Cloud - Google Gemini]",
+                    "display_label": f"{active_model} [Cloud - Google Gemini]",
+                    "available": True,
+                })
+            elif act_low.startswith("claude") or active_provider == "anthropic":
+                models.insert(0, {
+                    "id": active_model,
+                    "name": active_model,
+                    "type": "cloud",
+                    "provider": "anthropic",
+                    "tag": "[Cloud - Anthropic Claude]",
+                    "display_label": f"{active_model} [Cloud - Anthropic Claude]",
+                    "available": True,
+                })
+            elif act_low.startswith(("gpt-", "o1", "o3")) or active_provider in ("openai", "openai_compat"):
+                models.insert(0, {
+                    "id": active_model,
+                    "name": active_model,
+                    "type": "cloud",
+                    "provider": "openai",
+                    "tag": "[Cloud - OpenAI]",
+                    "display_label": f"{active_model} [Cloud - OpenAI]",
+                    "available": True,
+                })
+            else:
+                models.insert(0, {
+                    "id": active_model,
+                    "name": active_model,
+                    "type": "local",
+                    "provider": "ollama",
+                    "tag": "[Local]",
+                    "display_label": f"{active_model} [Local]",
+                    "available": ollama_online,
+                })
+
+        # 5. Final normalization: enforce that any Gemini or Claude model is strictly cloud tagged
+        for m in models:
+            mid_low = m["id"].lower()
+            if mid_low.startswith("gemini"):
+                m["type"] = "cloud"
+                m["provider"] = "gemini"
+                m["tag"] = "[Cloud - Google Gemini]"
+                m["display_label"] = f"{m['id']} [Cloud - Google Gemini]"
+            elif mid_low.startswith("claude"):
+                m["type"] = "cloud"
+                m["provider"] = "anthropic"
+                m["tag"] = "[Cloud - Anthropic Claude]"
+                m["display_label"] = f"{m['id']} [Cloud - Anthropic Claude]"
+            elif mid_low.startswith(("gpt-", "o1", "o3")):
+                m["type"] = "cloud"
+                m["provider"] = "openai"
+                m["tag"] = "[Cloud - OpenAI]"
+                m["display_label"] = f"{m['id']} [Cloud - OpenAI]"
+
         return models
 
-    async def switch_model(self, model_name: str) -> dict[str, Any]:
+    async def switch_model(self, model_name: str, provider: Optional[str] = None) -> dict[str, Any]:
         """Switch the active LLM model and reconfigure runtime transport."""
+        self._ensure_env_loaded()
         runtime = await self.get_runtime()
+        model_name = model_name.strip()
         catalog = ModelCatalog()
+
+        # Deduce provider hierarchically if not explicitly passed
+        prov_norm = (provider or "").strip().lower()
+        if not prov_norm:
+            for sm in self._read_saved_custom_models():
+                if sm.get("id") == model_name and sm.get("provider"):
+                    prov_norm = sm.get("provider").strip().lower()
+                    break
+        if not prov_norm:
+            for cp in CLOUD_PROVIDERS:
+                if any(cm["id"] == model_name for cm in cp["models"]):
+                    prov_norm = cp["id"]
+                    break
+        if not prov_norm:
+            m_low = model_name.lower()
+            if m_low.startswith("gemini") or "gemini" in m_low:
+                prov_norm = "gemini"
+            elif m_low.startswith("claude"):
+                prov_norm = "anthropic"
+            elif m_low.startswith(("gpt-", "o1", "o3", "chatgpt")):
+                prov_norm = "openai"
+            elif m_low.startswith("openrouter/"):
+                prov_norm = "openrouter"
+            elif m_low.startswith("deepseek") and ":" not in m_low:
+                prov_norm = "deepseek"
+            elif "llama-3.3-70b-versatile" in m_low or m_low.startswith("groq/"):
+                prov_norm = "groq"
+            else:
+                prov_norm = "ollama"
+
         info = catalog.resolve(model_name)
 
-        if not info:
+        if prov_norm == "gemini":
+            if not info or info.provider != "gemini":
+                info = ModelInfo(
+                    name=model_name,
+                    provider="gemini",
+                    context_window=1_000_000,
+                    max_output_tokens=65_536,
+                    description=f"{model_name} (Google Gemini Cloud)",
+                )
+            info.provider = "gemini"
+        elif prov_norm == "anthropic":
+            if not info or info.provider != "anthropic":
+                info = ModelInfo(
+                    name=model_name,
+                    provider="anthropic",
+                    context_window=200_000,
+                    max_output_tokens=16_384,
+                    description=f"{model_name} (Anthropic Claude Cloud)",
+                )
+            info.provider = "anthropic"
+        elif prov_norm in ("openai", "openai_compat"):
+            if not info or info.provider != "openai_compat" or not info.api_base or "localhost" in info.api_base:
+                info = ModelInfo(
+                    name=model_name,
+                    provider="openai_compat",
+                    context_window=128_000,
+                    max_output_tokens=16_384,
+                    description=f"{model_name} (OpenAI Cloud)",
+                    api_base="https://api.openai.com/v1",
+                )
+        elif not info:
             info = ModelInfo(
                 name=model_name,
                 provider="openai_compat",
@@ -547,11 +705,16 @@ class DashboardService:
         if info.provider == "anthropic":
             api_key_env = "ANTHROPIC_API_KEY"
             if not os.environ.get("ANTHROPIC_API_KEY"):
-                raise ValueError("Anthropic API key is not configured. Please save it in Settings.")
+                raise ValueError("Anthropic API key is not configured. Please save it in Doctor & Settings -> AI Engine Config.")
         elif info.provider == "gemini":
+            g_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+            if not g_key:
+                raise ValueError("Google Gemini API key is not configured. Please save it in Doctor & Settings -> AI Engine Config.")
             api_key_env = "GEMINI_API_KEY" if os.environ.get("GEMINI_API_KEY") else "GOOGLE_API_KEY"
-            if not os.environ.get(api_key_env):
-                raise ValueError("Google Gemini API key is not configured. Please save it in Settings.")
+            if not os.environ.get("GOOGLE_API_KEY"):
+                os.environ["GOOGLE_API_KEY"] = g_key
+            if not os.environ.get("GEMINI_API_KEY"):
+                os.environ["GEMINI_API_KEY"] = g_key
         else:  # openai_compat
             if "localhost" in (info.api_base or "") or "127.0.0.1" in (info.api_base or "") or not info.api_base:
                 api_base_env = "OLLAMA_API_BASE"
@@ -561,25 +724,25 @@ class DashboardService:
                 api_base_env = "OPENAI_API_BASE"
                 api_key_env = "OPENAI_API_KEY"
                 if not os.environ.get("OPENAI_API_KEY"):
-                    raise ValueError("OpenAI API key is not configured. Please save it in Settings.")
+                    raise ValueError("OpenAI API key is not configured. Please save it in Doctor & Settings -> AI Engine Config.")
                 os.environ["OPENAI_API_BASE"] = info.api_base
             elif "groq.com" in info.api_base:
                 api_base_env = "GROQ_API_BASE"
                 api_key_env = "GROQ_API_KEY"
                 if not os.environ.get("GROQ_API_KEY"):
-                    raise ValueError("Groq API key is not configured. Please save it in Settings.")
+                    raise ValueError("Groq API key is not configured. Please save it in Doctor & Settings -> AI Engine Config.")
                 os.environ["GROQ_API_BASE"] = info.api_base
             elif "deepseek.com" in info.api_base:
                 api_base_env = "DEEPSEEK_API_BASE"
                 api_key_env = "DEEPSEEK_API_KEY"
                 if not os.environ.get("DEEPSEEK_API_KEY"):
-                    raise ValueError("DeepSeek API key is not configured. Please save it in Settings.")
+                    raise ValueError("DeepSeek API key is not configured. Please save it in Doctor & Settings -> AI Engine Config.")
                 os.environ["DEEPSEEK_API_BASE"] = info.api_base
             elif "openrouter.ai" in info.api_base:
                 api_base_env = "OPENROUTER_API_BASE"
                 api_key_env = "OPENROUTER_API_KEY"
                 if not os.environ.get("OPENROUTER_API_KEY"):
-                    raise ValueError("OpenRouter API key is not configured. Please save it in Settings.")
+                    raise ValueError("OpenRouter API key is not configured. Please save it in Doctor & Settings -> AI Engine Config.")
                 os.environ["OPENROUTER_API_BASE"] = info.api_base
             else:
                 api_base_env = f"HERMCLAW_API_BASE_{info.provider.upper()}"
@@ -598,13 +761,17 @@ class DashboardService:
         runtime.agent.transport = transport
         runtime.agent.model_config = new_cfg
         self._current_model = info.name
-        self._current_provider = info.provider
+        self._current_provider = "gemini" if info.provider == "gemini" else (
+            "anthropic" if info.provider == "anthropic" else (
+                prov_norm if prov_norm != "ollama" else "openai_compat"
+            )
+        )
 
-        logger.info("dashboard.model_switched", model=info.name, provider=info.provider)
+        logger.info("dashboard.model_switched", model=info.name, provider=self._current_provider)
         return {
             "success": True,
             "model_name": info.name,
-            "provider": info.provider,
+            "provider": self._current_provider,
             "description": info.description,
             "context_window": info.context_window,
         }
@@ -777,28 +944,60 @@ class DashboardService:
         runtime = await self.get_runtime()
 
         start_time = time.time()
-        turn_result = await runtime.agent.run_turn(session_id, message)
-        elapsed = round(time.time() - start_time, 2)
+        try:
+            turn_result = await runtime.agent.run_turn(session_id, message)
+            elapsed = round(time.time() - start_time, 2)
 
-        # Extract tool calls performed in this turn
-        tools_executed = []
-        for step in getattr(turn_result, "steps", []):
-            if hasattr(step, "tool_call"):
-                tc = step.tool_call
-                tools_executed.append({
-                    "name": tc.name if hasattr(tc, "name") else getattr(tc, "tool_name", "tool"),
-                    "arguments": tc.arguments if hasattr(tc, "arguments") else {},
-                    "output": str(getattr(step, "tool_result", ""))[:1000],
-                })
+            # Extract tool calls performed in this turn
+            tools_executed = []
+            for step in getattr(turn_result, "steps", []):
+                if hasattr(step, "tool_call"):
+                    tc = step.tool_call
+                    tools_executed.append({
+                        "name": tc.name if hasattr(tc, "name") else getattr(tc, "tool_name", "tool"),
+                        "arguments": tc.arguments if hasattr(tc, "arguments") else {},
+                        "output": str(getattr(step, "tool_result", ""))[:1000],
+                    })
 
-        return {
-            "text": turn_result.text,
-            "session_id": session_id,
-            "elapsed_seconds": elapsed,
-            "input_tokens": turn_result.usage.input_tokens if turn_result.usage else 0,
-            "output_tokens": turn_result.usage.output_tokens if turn_result.usage else 0,
-            "tools_executed": tools_executed,
-        }
+            return {
+                "text": turn_result.text,
+                "session_id": session_id,
+                "elapsed_seconds": elapsed,
+                "input_tokens": turn_result.usage.input_tokens if turn_result.usage else 0,
+                "output_tokens": turn_result.usage.output_tokens if turn_result.usage else 0,
+                "tools_executed": tools_executed,
+            }
+        except Exception as exc:
+            elapsed = round(time.time() - start_time, 2)
+            err_msg = str(exc)
+            logger.error("agent.turn_failed", error=err_msg, session_id=session_id)
+
+            active_m = getattr(self, "_current_model", "model")
+            active_p = getattr(self, "_current_provider", "provider")
+            help_tip = ""
+            if "gemini" in str(active_m).lower() or "gemini" in str(active_p).lower():
+                if "404" in err_msg or "not found" in err_msg.lower():
+                    help_tip = "\n\n💡 *Tip: If this model is experiencing issues, try `gemini-3.8-flash`, `gemini-3.5-flash`, or `gemini-2.5-pro` in Doctor & Settings -> AI Engine Config.*"
+                elif "503" in err_msg or "demand" in err_msg.lower():
+                    help_tip = "\n\n💡 *Tip: Google Gemini API reported temporary high demand (503). Retrying shortly or switching to `gemini-3.8-flash` / `gemini-3.5-flash` may help.*"
+                elif "API key" in err_msg or "400" in err_msg or "403" in err_msg:
+                    help_tip = "\n\n💡 *Tip: Please verify your Google Gemini API key in Doctor & Settings -> AI Engine Config.*"
+
+            formatted_text = f"⚠️ **Agent Error:** {err_msg}{help_tip}"
+            try:
+                await runtime.memory_store.a_add_message(session_id, "assistant", formatted_text)
+            except Exception:
+                pass
+
+            return {
+                "text": formatted_text,
+                "session_id": session_id,
+                "elapsed_seconds": elapsed,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "tools_executed": [],
+                "error": err_msg,
+            }
 
     async def delete_session(self, session_id: str) -> bool:
         """Delete a session from state.db."""
