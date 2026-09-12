@@ -724,13 +724,14 @@ class DashboardService:
                     api_base="https://api.openai.com/v1",
                 )
         elif not info:
+            is_local = (prov_norm == "ollama") or (":" in model_name) or ("localhost" in getattr(info, "api_base", ""))
             info = ModelInfo(
                 name=model_name,
                 provider="openai_compat",
-                context_window=128_000,
-                max_output_tokens=8192,
-                description=f"{model_name} (local via Ollama)",
-                api_base="http://localhost:11434/v1",
+                context_window=8192 if is_local else 128_000,
+                max_output_tokens=4096 if is_local else 8192,
+                description=f"{model_name} (local via Ollama)" if is_local else f"{model_name} (OpenAI Cloud)",
+                api_base="http://localhost:11434/v1" if is_local else "https://api.openai.com/v1",
             )
 
         api_base_env = None

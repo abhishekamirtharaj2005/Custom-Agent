@@ -655,9 +655,14 @@ class HermclawAgent:
                             text="Here are the results from the tools I used:\n\n" + "\n".join(summary_parts),
                             stop_reason="end_turn")
                     else:
-                        response = dataclasses.replace(resp_candidate,
-                            text="I ran into a context length limit. Could you try a shorter request?",
-                            stop_reason="end_turn")
+                        if len(messages) > 2:
+                            response = dataclasses.replace(resp_candidate,
+                                text="The conversation history in this session has filled the local model's context window. Please start a **New Session** (using the **+** button in the top left sidebar) to run this task with a clean, full context window.",
+                                stop_reason="end_turn")
+                        else:
+                            response = dataclasses.replace(resp_candidate,
+                                text="I ran into a context length limit. Could you try a shorter request, or switch to a cloud model with a larger context window?",
+                                stop_reason="end_turn")
                     break
 
                 logger.warning("agent.empty_response_retry", retry=retry + 1,
