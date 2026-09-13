@@ -148,3 +148,34 @@ async def test_agent_with_context_manager_lifecycle(wired_profile, tmp_path) -> 
 
     cm.close()
 
+
+async def test_unlimited_tool_iterations_per_turn(wired_profile) -> None:
+    from hermclaw.tools.shell import ShellTool
+    wired_profile["tool_dispatcher"].register(ShellTool(backend="local"))
+
+    # Produce 15 sequential tool calls in a single turn
+    responses = [
+        tool_call_response("shell", {"command": f"echo step_{i}"})
+        for i in range(15)
+    ]
+    responses.append(text_response("All 15 steps completed successfully."))
+
+    transport = FakeTransport(responses=responses)
+    agent = HermclawAgent(
+        profile="default",
+        memory_store=wired_profile["memory_store"],
+        identity_files=wired_profile["identity_files"],
+        skill_registry=wired_profile["skill_registry"],
+        tool_dispatcher=wired_profile["tool_dispatcher"],
+        transport=transport,
+        model_config=ModelConfig(model_name="fake"),
+    )
+
+    session_id = wired_profile["memory_store"].create_session(channel="cli", model="fake")
+    result = await agent.run_turn(session_id, "Run 15 steps")
+
+    assert result.stop_reason == "end_turn"
+    assert result.text == "All 15 steps completed successfully."
+    assert len(result.tool_calls_made) == 15
+
+

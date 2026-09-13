@@ -27,7 +27,7 @@ from hermclaw.tools.base import ToolDispatcher, ToolResult
 
 logger = structlog.get_logger(__name__)
 
-DEFAULT_MAX_TOOL_ITERATIONS = 10
+DEFAULT_MAX_TOOL_ITERATIONS = 0  # 0 or None means unlimited tool iterations per turn
 
 
 # ---------------------------------------------------------------------------
@@ -659,7 +659,27 @@ class HermclawAgent:
         total_usage = Usage()
         tool_records: list[ToolCallRecord] = []
 
-        for iteration in range(self.max_tool_iterations):
+        iteration = 0
+        consecutive_identical_calls = 0
+        last_signature: Optional[tuple] = None
+
+        while True:
+            # If an explicit positive limit is set, stop when reached.
+            # 0 or None means unlimited tool iterations.
+            if self.max_tool_iterations and self.max_tool_iterations > 0 and iteration >= self.max_tool_iterations:
+                logger.warning("agent.max_tool_iterations_reached", session_id=session_id, limit=self.max_tool_iterations)
+                final_stop = "max_tool_iterations"
+                if tool_records and not final_text:
+                    parts = []
+                    for tr in tool_records:
+                        if tr.result.ok and tr.result.output:
+                            parts.append(f"[{tr.name}]: {tr.result.output[:500]}")
+                    if parts:
+                        final_text = "Here are the results from the tools I used:\n\n" + "\n\n".join(parts)
+                    else:
+                        final_text = "I used several tools but couldn't produce a final answer. Please try rephrasing your question."
+                break
+
             # Only stream the final response (not intermediate tool-use rounds)
             use_stream = stream and len(tool_records) == 0
 
@@ -747,6 +767,20 @@ class HermclawAgent:
                 break
 
             if response.tool_calls:
+                # Detect runaway identical tool loops (e.g. calling exact same tool 8+ times without making progress)
+                call_sig = tuple((tc.name, json.dumps(tc.arguments, sort_keys=True)) for tc in response.tool_calls)
+                if call_sig and call_sig == last_signature:
+                    consecutive_identical_calls += 1
+                    if consecutive_identical_calls >= 8:
+                        logger.warning("agent.stuck_in_identical_tool_loop", count=consecutive_identical_calls, tool=call_sig[0][0])
+                        final_text = f"Halting: The model executed the identical tool `{call_sig[0][0]}` 8 times in a row without progress."
+                        final_stop = "loop_detected"
+                        await self.memory_store.a_add_message(session_id, "assistant", final_text)
+                        break
+                else:
+                    consecutive_identical_calls = 0
+                    last_signature = call_sig
+
                 assistant_blocks = assistant_content_from_response(response)
                 messages.append({"role": "assistant", "content": assistant_blocks})
                 await self.memory_store.a_add_message(
@@ -795,6 +829,7 @@ class HermclawAgent:
 
                 messages.append({"role": "user", "content": result_blocks})
                 await self.memory_store.a_add_message(session_id, "tool", json.dumps(result_blocks))
+                iteration += 1
                 continue
 
             # Model produced a text response (possibly alongside tool calls on some providers)
@@ -819,19 +854,6 @@ class HermclawAgent:
 
             await self.memory_store.a_add_message(session_id, "assistant", final_text)
             break
-        else:
-            logger.warning("agent.max_tool_iterations_reached", session_id=session_id, limit=self.max_tool_iterations)
-            final_stop = "max_tool_iterations"
-            # Synthesize a response from the tool results so the user isn't left with nothing
-            if tool_records and not final_text:
-                parts = []
-                for tr in tool_records:
-                    if tr.result.ok and tr.result.output:
-                        parts.append(f"[{tr.name}]: {tr.result.output[:500]}")
-                if parts:
-                    final_text = "Here are the results from the tools I used:\n\n" + "\n\n".join(parts)
-                else:
-                    final_text = "I used several tools but couldn't produce a final answer. Please try rephrasing your question."
 
         await self.memory_store.a_update_session_usage(session_id, token_delta=total_usage.total_tokens)
 
