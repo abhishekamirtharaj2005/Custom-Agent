@@ -44,18 +44,36 @@ def block_real_sockets(request: pytest.FixtureRequest, monkeypatch: pytest.Monke
             "Use FakeTransport / an injected fake channel client instead."
         )
 
-    # Patching connect/connect_ex (rather than replacing the socket.socket
-    # constructor itself) blocks outbound network connections while
-    # leaving `socket.socket` fully intact as a class -- some transitively
-    # imported libraries (e.g. aiohttp, pulled in by slack_bolt) evaluate
-    # `socket.socket | X` as a type annotation at import time, which
-    # breaks if socket.socket has been replaced with a plain function.
-    monkeypatch.setattr(socket.socket, "connect", _blocked)
-    monkeypatch.setattr(socket.socket, "connect_ex", _blocked)
+    real_connect = socket.socket.connect
+    real_connect_ex = socket.socket.connect_ex
+
+    def _is_loopback(addr):
+        if isinstance(addr, tuple) and len(addr) >= 1:
+            host = str(addr[0])
+            if host in ("127.0.0.1", "::1", "localhost"):
+                return True
+        return False
+
+    def _guarded_connect(self, *args, **kwargs):
+        addr = args[0] if args else kwargs.get("address")
+        if _is_loopback(addr):
+            return real_connect(self, *args, **kwargs)
+        _blocked(*args, **kwargs)
+
+    def _guarded_connect_ex(self, *args, **kwargs):
+        addr = args[0] if args else kwargs.get("address")
+        if _is_loopback(addr):
+            return real_connect_ex(self, *args, **kwargs)
+        _blocked(*args, **kwargs)
+
+    monkeypatch.setattr(socket.socket, "connect", _guarded_connect)
+    monkeypatch.setattr(socket.socket, "connect_ex", _guarded_connect_ex)
 
     real_create_connection = socket.create_connection
 
     def _guarded_create_connection(address, *args, **kwargs):
+        if _is_loopback(address):
+            return real_create_connection(address, *args, **kwargs)
         _blocked()
 
     monkeypatch.setattr(socket, "create_connection", _guarded_create_connection)

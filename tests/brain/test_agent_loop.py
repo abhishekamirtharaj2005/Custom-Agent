@@ -95,3 +95,56 @@ async def test_system_prompt_includes_skill_listing(wired_profile, tmp_path) -> 
     session_id = wired_profile["memory_store"].create_session(channel="cli", model="fake")
     await agent.run_turn(session_id, "hi")
     assert "example-skill" in transport.calls[0]["system"]
+
+
+async def test_agent_with_context_manager_lifecycle(wired_profile, tmp_path) -> None:
+    from hermclaw.brain.memory.context_manager import ContextManager
+    from hermclaw.tools.file_tools import FileWriteTool
+
+    context_db_path = tmp_path / "context.db"
+    cm = ContextManager(db_path=context_db_path)
+
+    file_tool = FileWriteTool()
+    wired_profile["tool_dispatcher"].register(file_tool)
+
+    target_file = tmp_path / "created.txt"
+    transport = FakeTransport(responses=[
+        tool_call_response("file_write", {"path": str(target_file), "content": "Hello Context"}),
+        text_response("File created successfully."),
+    ])
+
+    agent = HermclawAgent(
+        profile="default",
+        memory_store=wired_profile["memory_store"],
+        identity_files=wired_profile["identity_files"],
+        skill_registry=wired_profile["skill_registry"],
+        tool_dispatcher=wired_profile["tool_dispatcher"],
+        transport=transport,
+        model_config=ModelConfig(model_name="fake"),
+        context_manager=cm,
+    )
+
+    session_id = wired_profile["memory_store"].create_session(channel="cli", model="fake")
+    result = await agent.run_turn(session_id, "Please create a new file named created.txt with hello content")
+
+    assert result.text == "File created successfully."
+    assert len(result.tool_calls_made) == 1
+
+    # Verify task state in context manager
+    state = cm.get_task_state(session_id)
+    assert "Please create a new file" in state.goal
+    assert str(target_file) in state.files_modified
+
+    # Verify events recorded in raw_events
+    cur = cm._db.execute("SELECT event_type FROM raw_events WHERE session_id = ?", (session_id,))
+    event_types = [r[0] for r in cur.fetchall()]
+    assert "user_message" in event_types
+    assert "file_write" in event_types
+    assert "assistant_response" in event_types
+
+    # Verify checkpoint created
+    chk = cm.get_latest_checkpoint(session_id)
+    assert chk is not None
+
+    cm.close()
+

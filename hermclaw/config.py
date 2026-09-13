@@ -181,6 +181,13 @@ class MemoryConfig(BaseModel):
     keep_recent_exchanges: int = Field(default=2, ge=0)
     memory_char_limit: int = Field(default=100000, gt=0)
     user_char_limit: int = Field(default=100000, gt=0)
+    max_context_percent: float = Field(default=0.75, gt=0.0, le=1.0)
+    memory_db_path: Optional[str] = None
+    recent_interactions_count: int = Field(default=4, ge=1)
+    retrieval_count: int = Field(default=5, ge=0)
+    summary_frequency: int = Field(default=5, ge=1)
+    checkpoint_frequency: int = Field(default=1, ge=1)
+    importance_threshold: str = Field(default="important")
 
 
 class ReflectionConfig(BaseModel):

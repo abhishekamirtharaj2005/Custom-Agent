@@ -329,6 +329,7 @@ class HermclawAgent:
         compressor: Optional[Any] = None,  # ContextCompressor; typed loosely to avoid a circular import
         max_tool_iterations: int = DEFAULT_MAX_TOOL_ITERATIONS,
         vector_memory: Optional[Any] = None,  # VectorMemory for persistent recall
+        context_manager: Optional[Any] = None,  # ContextManager for unlimited context management
     ) -> None:
         self.profile = profile
         self.memory_store = memory_store
@@ -341,6 +342,7 @@ class HermclawAgent:
         self.compressor = compressor
         self.max_tool_iterations = max_tool_iterations
         self.vector_memory = vector_memory
+        self.context_manager = context_manager
         self.skill_growth_engine: Optional[SkillGrowthEngine] = None
         self.reflection_config: Optional[ReflectionConfig] = None
         self._turn_count = 0
@@ -410,6 +412,31 @@ class HermclawAgent:
             )
         except Exception:
             pass  # Audit is best-effort, never break the main loop
+
+    async def _record_tool_event(self, session_id: str, tc: ToolCallRequest, result: ToolResult) -> None:
+        """Record tool execution in ContextManager, tracking files, decisions, and errors."""
+        if not self.context_manager:
+            return
+        meta = {"name": tc.name, "ok": result.ok, "arguments": tc.arguments}
+        output_snippet = result.output[:500] if result.ok else (result.error or "")[:500]
+        content = f"Tool {tc.name} executed: {output_snippet}"
+
+        if tc.name in ("file_write", "file_edit", "patch") and result.ok:
+            path = tc.arguments.get("path") or tc.arguments.get("file_path") or tc.arguments.get("target")
+            if path:
+                meta["path"] = str(path)
+
+        ev_type = tc.name if result.ok else "error"
+        try:
+            await self.context_manager.record_event(
+                session_id=session_id,
+                event_type=ev_type,
+                content=content,
+                role="tool",
+                metadata=meta,
+            )
+        except Exception as exc:
+            logger.debug("agent.record_tool_event_failed", error=str(exc))
 
     async def _auto_recall(self, user_message: str) -> list[str]:
         """Search vector memory for context relevant to the user's message.
@@ -549,6 +576,20 @@ class HermclawAgent:
     async def run_turn(self, session_id: str, user_message: str, stream: bool = False) -> AgentTurnResult:
         await self.memory_store.a_add_message(session_id, "user", user_message)
 
+        # Context manager event & task state initialization
+        task_state = None
+        if self.context_manager is not None:
+            try:
+                task_state = self.context_manager.initialize_task_from_prompt(session_id, user_message)
+                await self.context_manager.record_event(
+                    session_id=session_id,
+                    event_type="user_message",
+                    content=user_message,
+                    role="user",
+                )
+            except Exception as exc:
+                logger.debug("agent.context_manager_init_failed", error=str(exc))
+
         history_rows = await self.memory_store.a_get_session_messages(session_id, include_compressed_away=False)
         messages = rows_to_canonical_messages(history_rows)
 
@@ -562,18 +603,25 @@ class HermclawAgent:
             skills_compact=self.skill_registry.compact_listing()
         )
 
-        # Inject recalled memories by appending them directly to the last
-        # user message. This is the most reliable approach for ALL model
-        # sizes — the model literally cannot ignore context that's part
-        # of the message it's responding to.
-        if recalled_facts and messages:
+        # Budgeted context construction or fallback to raw recalled facts injection
+        if self.context_manager is not None:
+            try:
+                messages = await self.context_manager.build_budgeted_context(
+                    session_id=session_id,
+                    user_message=user_message,
+                    system_prompt=system_prompt,
+                    all_messages=messages,
+                    model_config=self.model_config,
+                )
+            except Exception as exc:
+                logger.warning("agent.budgeted_context_failed_fallback", error=str(exc))
+        elif recalled_facts and messages:
             facts_text = "\n".join(f"- {f}" for f in recalled_facts)
             augmented_content = (
                 f"{user_message}\n\n"
                 f"[Your memory recalls these relevant facts about the user. "
                 f"USE them in your response:]\n{facts_text}"
             )
-            # Replace the last message's content (which is the current user message)
             if messages[-1].get("role") == "user":
                 messages[-1] = {"role": "user", "content": augmented_content}
             logger.info("agent.memory_recalled", facts_count=len(recalled_facts))
@@ -582,7 +630,16 @@ class HermclawAgent:
         tools = select_tools_for_query(all_tools, user_message)
 
         compressed = False
-        if self.compressor is not None:
+        if self.context_manager is not None:
+            if self.context_manager.should_compress_context(messages, system_prompt, self.model_config):
+                _summary, continuation_msgs = await self.context_manager.compress_and_create_continuation(
+                    session_id=session_id,
+                    working_messages=messages,
+                )
+                messages = continuation_msgs
+                compressed = True
+                logger.info("agent.context_compressed_by_manager", session_id=session_id)
+        elif self.compressor is not None:
             token_estimate = approx_token_count(messages, system_prompt)
             if self.compressor.should_compress(self.model_config, token_estimate):
                 comp_result = await self.compressor.compress(
@@ -643,6 +700,15 @@ class HermclawAgent:
                 # Don't retry on max_tokens — the context is too full, retrying won't help
                 if resp_candidate.stop_reason == "max_tokens":
                     logger.warning("agent.max_tokens_hit", iteration=iteration)
+                    if self.context_manager is not None:
+                        _summary, continuation_msgs = await self.context_manager.compress_and_create_continuation(
+                            session_id=session_id,
+                            working_messages=messages,
+                        )
+                        messages = continuation_msgs
+                        compressed = True
+                        logger.info("agent.auto_compressed_on_max_tokens", session_id=session_id)
+                        continue
                     # If we have tool results from previous iterations, summarize them
                     if tool_records:
                         summary_parts = []
@@ -704,6 +770,8 @@ class HermclawAgent:
                             tool_records.append(ToolCallRecord(name=tc.name, arguments=tc.arguments, result=result))
                             result_blocks.append(tool_result_block(tc.id, result))
                             self._audit_tool_call(session_id, tc.name, result)
+                            if self.context_manager:
+                                await self._record_tool_event(session_id, tc, result)
                         if par_result.speedup > 1.2:
                             logger.info("agent.parallel_speedup", speedup=par_result.speedup,
                                         parallel_s=par_result.total_time_s, sequential_s=par_result.sequential_time_s)
@@ -714,12 +782,16 @@ class HermclawAgent:
                             tool_records.append(ToolCallRecord(name=tc.name, arguments=tc.arguments, result=result))
                             result_blocks.append(tool_result_block(tc.id, result))
                             self._audit_tool_call(session_id, tc.name, result)
+                            if self.context_manager:
+                                await self._record_tool_event(session_id, tc, result)
                 else:
                     for tc in response.tool_calls:
                         result = await self.tool_dispatcher.dispatch(tc.name, tc.arguments)
                         tool_records.append(ToolCallRecord(name=tc.name, arguments=tc.arguments, result=result))
                         result_blocks.append(tool_result_block(tc.id, result))
                         self._audit_tool_call(session_id, tc.name, result)
+                        if self.context_manager:
+                            await self._record_tool_event(session_id, tc, result)
 
                 messages.append({"role": "user", "content": result_blocks})
                 await self.memory_store.a_add_message(session_id, "tool", json.dumps(result_blocks))
@@ -765,6 +837,29 @@ class HermclawAgent:
 
         # Auto-save: persist important facts from this turn to long-term memory
         await self._auto_save(session_id, user_message, final_text)
+
+        # Context manager event & checkpointing
+        if self.context_manager is not None:
+            try:
+                await self.context_manager.record_event(
+                    session_id=session_id,
+                    event_type="assistant_response",
+                    content=final_text,
+                    role="assistant",
+                )
+                state = self.context_manager.get_task_state(session_id)
+                if state:
+                    self.context_manager.save_task_state(state)
+                    chk_freq = getattr(self.context_manager.config, "checkpoint_frequency", 1)
+                    if chk_freq > 0 and (self._turn_count % chk_freq == 0):
+                        self.context_manager.save_checkpoint(
+                            session_id=session_id,
+                            milestone=f"turn_{self._turn_count}",
+                            working_memory=messages,
+                            metadata={"final_stop": final_stop, "tools_used": [t.name for t in tool_records]},
+                        )
+            except Exception as exc:
+                logger.debug("agent.context_manager_post_turn_failed", error=str(exc))
 
         # Auto-reflect: run the reflection engine periodically or on-demand
         await self._auto_reflect(session_id, user_message)

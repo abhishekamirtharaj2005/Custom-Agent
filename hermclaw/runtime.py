@@ -14,6 +14,7 @@ import structlog
 from hermclaw.body.mcp_client import McpClientManager
 from hermclaw.brain.agent_loop import FallbackEntry, HermclawAgent
 from hermclaw.brain.memory.compressor import ContextCompressor
+from hermclaw.brain.memory.context_manager import ContextManager
 from hermclaw.brain.memory.store import MemoryStore
 from hermclaw.brain.memory.vector_memory import MemoryManageTool, VectorMemory
 from hermclaw.brain.profiles import IdentityFiles, ProfileManager, ProfilePaths
@@ -72,12 +73,15 @@ class AgentRuntime:
     agent: HermclawAgent
     mcp_manager: Optional[McpClientManager] = None
     vector_memory: Optional[VectorMemory] = None
+    context_manager: Optional[ContextManager] = None
 
     async def aclose(self) -> None:
         if self.mcp_manager is not None:
             await self.mcp_manager.close()
         if self.vector_memory is not None:
             self.vector_memory.close()
+        if self.context_manager is not None:
+            self.context_manager.close()
         self.memory_store.close()
 
 
@@ -241,11 +245,24 @@ async def build_agent_runtime(
         keep_recent_exchanges=config.brain.memory.keep_recent_exchanges,
     )
 
+    context_db_path = config.brain.memory.memory_db_path
+    if not context_db_path:
+        context_db_path = paths.state_db.parent / "context_memory.db"
+    else:
+        from pathlib import Path
+        context_db_path = Path(context_db_path)
+
+    context_manager = ContextManager(
+        db_path=context_db_path,
+        config=config.brain.memory,
+        vector_memory=vector_memory,
+    )
+
     agent = HermclawAgent(
         profile=profile, memory_store=memory_store, identity_files=identity_files,
         skill_registry=skill_registry, tool_dispatcher=dispatcher, transport=transport,
         model_config=config.brain.model, fallbacks=fallbacks, compressor=compressor,
-        vector_memory=vector_memory,
+        vector_memory=vector_memory, context_manager=context_manager,
     )
     # Wire skill growth & reflection into the agent loop so it can auto-generate
     # skills from repeated procedures without requiring the CLI `hermclaw reflect`.
@@ -256,7 +273,7 @@ async def build_agent_runtime(
         profile=profile, paths=paths, memory_store=memory_store, identity_files=identity_files,
         skill_registry=skill_registry, skill_growth_engine=skill_growth_engine,
         tool_dispatcher=dispatcher, agent=agent, mcp_manager=mcp_manager,
-        vector_memory=vector_memory,
+        vector_memory=vector_memory, context_manager=context_manager,
     )
 
 

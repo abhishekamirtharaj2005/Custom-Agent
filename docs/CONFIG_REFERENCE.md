@@ -72,6 +72,13 @@ Every `*_env` field names an **environment variable**, never a literal secret --
 | `brain.memory.keep_recent_exchanges` | int | `2` | Brain / Hermes Agent |
 | `brain.memory.memory_char_limit` | int | `2200` | Brain / Hermes Agent |
 | `brain.memory.user_char_limit` | int | `1375` | Brain / Hermes Agent |
+| `brain.memory.max_context_percent` | float | `0.75` | Brain / Context Manager |
+| `brain.memory.memory_db_path` | str | `""` | Brain / Context Manager |
+| `brain.memory.recent_interactions_count` | int | `4` | Brain / Context Manager |
+| `brain.memory.retrieval_count` | int | `5` | Brain / Context Manager |
+| `brain.memory.summary_frequency` | int | `5` | Brain / Context Manager |
+| `brain.memory.checkpoint_frequency` | int | `1` | Brain / Context Manager |
+| `brain.memory.importance_threshold` | str | `"important"` | Brain / Context Manager |
 
 ## brain.reflection
 
