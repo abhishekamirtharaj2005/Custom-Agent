@@ -296,3 +296,225 @@ class UrlReadTool(ToolABC):
             return ToolResult(ok=True, output=f"[{url}]\n\n{text}")
         except Exception as exc:
             return ToolResult(ok=False, output="", error=f"Error fetching URL: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Web Readability Tool (Mozilla Readability / Markdown Extraction)
+# ---------------------------------------------------------------------------
+
+
+class WebReadabilityTool(ToolABC):
+    """Extract clean, distraction-free markdown article content from any webpage."""
+
+    def spec(self) -> ToolSpec:
+        return ToolSpec(
+            name="web_readability",
+            description=(
+                "Extract clean, distraction-free Markdown article content from a web page. "
+                "Strips navigation menus, ads, headers, footers, and sidebars, returning "
+                "the main article text formatted in Markdown with title and reading time."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "The URL to extract article content from."},
+                },
+                "required": ["url"],
+            },
+        )
+
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
+        url = args["url"]
+        try:
+            async with httpx.AsyncClient(timeout=25.0, follow_redirects=True) as client:
+                resp = await client.get(url, headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+                })
+                resp.raise_for_status()
+                html = resp.text
+
+            # 1. Extract metadata
+            title_match = re.search(r'<title[^>]*>(.*?)</title>', html, re.IGNORECASE | re.DOTALL)
+            title = title_match.group(1).strip() if title_match else "Untitled Document"
+
+            author_match = re.search(r'<meta[^>]*name=["\']author["\'][^>]*content=["\']([^"\']+)["\']', html, re.IGNORECASE)
+            author = author_match.group(1) if author_match else "Unknown"
+
+            # 2. Strip noise elements
+            cleaned = re.sub(r'<(script|style|nav|header|footer|aside|form|button|noscript|svg)[^>]*>.*?</\1>', '', html, flags=re.DOTALL | re.IGNORECASE)
+
+            # 3. Locate article container if present
+            article_match = re.search(r'<article[^>]*>(.*?)</article>', cleaned, re.DOTALL | re.IGNORECASE)
+            if not article_match:
+                article_match = re.search(r'<main[^>]*>(.*?)</main>', cleaned, re.DOTALL | re.IGNORECASE)
+            content_html = article_match.group(1) if article_match else cleaned
+
+            # 4. Convert HTML tags to Markdown formatting
+            md = content_html
+            # Headings
+            md = re.sub(r'<h1[^>]*>(.*?)</h1>', r'\n# \1\n', md, flags=re.DOTALL | re.IGNORECASE)
+            md = re.sub(r'<h2[^>]*>(.*?)</h2>', r'\n## \1\n', md, flags=re.DOTALL | re.IGNORECASE)
+            md = re.sub(r'<h3[^>]*>(.*?)</h3>', r'\n### \1\n', md, flags=re.DOTALL | re.IGNORECASE)
+            md = re.sub(r'<h[4-6][^>]*>(.*?)</h[4-6]>', r'\n#### \1\n', md, flags=re.DOTALL | re.IGNORECASE)
+
+            # Formatting
+            md = re.sub(r'<strong[^>]*>(.*?)</strong>', r'**\1**', md, flags=re.DOTALL | re.IGNORECASE)
+            md = re.sub(r'<b[^>]*>(.*?)</b>', r'**\1**', md, flags=re.DOTALL | re.IGNORECASE)
+            md = re.sub(r'<em[^>]*>(.*?)</em>', r'*\1*', md, flags=re.DOTALL | re.IGNORECASE)
+            md = re.sub(r'<i[^>]*>(.*?)</i>', r'*\1*', md, flags=re.DOTALL | re.IGNORECASE)
+            md = re.sub(r'<blockquote[^>]*>(.*?)</blockquote>', r'\n> \1\n', md, flags=re.DOTALL | re.IGNORECASE)
+
+            # Code blocks & inline code
+            md = re.sub(r'<pre><code[^>]*>(.*?)</code></pre>', r'\n```\n\1\n```\n', md, flags=re.DOTALL | re.IGNORECASE)
+            md = re.sub(r'<code[^>]*>(.*?)</code>', r'`\1`', md, flags=re.DOTALL | re.IGNORECASE)
+
+            # Links
+            md = re.sub(r'<a[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', r'[\2](\1)', md, flags=re.DOTALL | re.IGNORECASE)
+
+            # Lists & paragraphs
+            md = re.sub(r'<li[^>]*>(.*?)</li>', r'\n- \1', md, flags=re.DOTALL | re.IGNORECASE)
+            md = re.sub(r'</?(p|div|br\s*/?)>', '\n\n', md, flags=re.IGNORECASE)
+
+            # Remove remaining tags & unescape entities
+            md = re.sub(r'<[^>]+>', '', md)
+            import html as html_mod
+            md = html_mod.unescape(md)
+
+            # Normalize multiple blank lines
+            lines = [l.strip() for l in md.splitlines()]
+            body_text = "\n".join(lines)
+            body_text = re.sub(r'\n{3,}', '\n\n', body_text).strip()
+
+            word_count = len(body_text.split())
+            read_time = max(1, round(word_count / 200))
+
+            if len(body_text) > 12000:
+                body_text = body_text[:12000] + "\n\n... [article truncated for context budget]"
+
+            output = (
+                f"# {title}\n\n"
+                f"**URL:** {url} | **Author:** {author} | **Read Time:** ~{read_time} min ({word_count} words)\n\n"
+                f"---\n\n"
+                f"{body_text}"
+            )
+            return ToolResult(ok=True, output=output)
+        except Exception as exc:
+            return ToolResult(ok=False, output="", error=f"Readability extraction error: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Firecrawl Scraping & Crawling Tool
+# ---------------------------------------------------------------------------
+
+
+class FirecrawlScrapeTool(ToolABC):
+    """Scrape or crawl websites with Firecrawl or built-in recursive crawler."""
+
+    def spec(self) -> ToolSpec:
+        return ToolSpec(
+            name="firecrawl_scrape",
+            description=(
+                "Deep scrape or crawl web pages into structured Markdown and sitemaps. "
+                "Supports Firecrawl API (via FIRECRAWL_API_KEY) with built-in multi-page crawler fallback. "
+                "Actions: scrape (single page deep markdown), crawl (site hierarchy & sub-pages)."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "Target website URL."},
+                    "action": {
+                        "type": "string",
+                        "enum": ["scrape", "crawl"],
+                        "description": "Scrape single URL or crawl site hierarchy. Default: scrape.",
+                    },
+                    "max_depth": {"type": "integer", "description": "Maximum crawl depth (default 2, max 5)."},
+                    "limit": {"type": "integer", "description": "Maximum pages to crawl (default 5, max 20)."},
+                },
+                "required": ["url"],
+            },
+        )
+
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
+        import os
+        from urllib.parse import urljoin, urlparse
+
+        url = args["url"]
+        action = args.get("action", "scrape")
+        max_depth = min(args.get("max_depth", 2), 5)
+        limit = min(args.get("limit", 5), 20)
+
+        # 1. Try Firecrawl API if configured
+        firecrawl_key = os.environ.get("FIRECRAWL_API_KEY")
+        if firecrawl_key:
+            try:
+                endpoint = "https://api.firecrawl.dev/v1/scrape" if action == "scrape" else "https://api.firecrawl.dev/v1/crawl"
+                payload = {"url": url}
+                if action == "crawl":
+                    payload["limit"] = limit
+                    payload["maxDepth"] = max_depth
+
+                async with httpx.AsyncClient(timeout=45.0) as client:
+                    resp = await client.post(
+                        endpoint,
+                        headers={"Authorization": f"Bearer {firecrawl_key}", "Content-Type": "application/json"},
+                        json=payload,
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+                    if action == "scrape":
+                        md = data.get("data", {}).get("markdown", "")
+                        return ToolResult(ok=True, output=f"🕷️ Firecrawl Scrape ({url}):\n\n{md[:6000]}")
+                    else:
+                        crawl_id = data.get("id", "done")
+                        return ToolResult(ok=True, output=f"🕷️ Firecrawl Crawl started: Job ID {crawl_id} for {url}")
+            except Exception as exc:
+                logger.debug("firecrawl.api_failed", error=str(exc))
+
+        # 2. Built-in Local Recursive Scraper & Sitemap Generator
+        try:
+            async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+                resp = await client.get(url, headers={"User-Agent": "HermClaw-WebCrawler/1.0"})
+                resp.raise_for_status()
+                html = resp.text
+
+            parsed_root = urlparse(url)
+            base_domain = parsed_root.netloc
+
+            # Extract links
+            found_links = set(re.findall(r'href=["\']([^"\'#]+)["\']', html))
+            same_domain_links = []
+            for link in found_links:
+                full_link = urljoin(url, link)
+                p = urlparse(full_link)
+                if p.netloc == base_domain and p.scheme in ("http", "https"):
+                    same_domain_links.append(full_link)
+
+            unique_links = sorted(list(set(same_domain_links)))[:limit]
+
+            # Convert main page text
+            readability_tool = WebReadabilityTool()
+            page_res = await readability_tool.execute({"url": url})
+            main_markdown = page_res.output if page_res.ok else "Failed to parse main page."
+
+            if action == "scrape":
+                return ToolResult(
+                    ok=True,
+                    output=(
+                        f"🕷️ Scrape Result: {url}\n\n"
+                        f"{main_markdown[:5000]}\n\n"
+                        f"--- Discovered Internal Links ({len(unique_links)}):\n"
+                        + "\n".join(f"- {link}" for link in unique_links[:10])
+                    ),
+                )
+            else:
+                sitemap_tree = [f"🕷️ Site Hierarchy for {base_domain}:"]
+                sitemap_tree.append(f"└── 🏠 {url} (Root)")
+                for lk in unique_links:
+                    path = urlparse(lk).path or "/"
+                    sitemap_tree.append(f"    ├── 📄 {path} -> {lk}")
+
+                return ToolResult(ok=True, output="\n".join(sitemap_tree))
+
+        except Exception as exc:
+            return ToolResult(ok=False, output="", error=f"Crawler error: {exc}")
+

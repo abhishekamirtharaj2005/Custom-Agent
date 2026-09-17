@@ -50,12 +50,15 @@ from hermclaw.tools.task_tools import KanbanTool, TodoTool
 from hermclaw.tools.tts_tool import TTSTool, TranscriptionTool
 from hermclaw.tools.patch_tool import PatchTool
 from hermclaw.tools.code_exec import CodeSandboxTool, ProcessManagerTool, ComputerUseTool
+from hermclaw.tools.lsp_tool import LSPTool
 from hermclaw.tools.media_extra import (
-    VideoGenerateTool, ElevenLabsTTS, ExaSearchTool, TavilySearchTool,
+    VideoGenerateTool, ElevenLabsTTS, ExaSearchTool, TavilySearchTool, MusicGenerateTool,
 )
 from hermclaw.tools.virtual_pet import VirtualPetTool
-from hermclaw.tools.web_tools import UrlReadTool, WebSearchTool
-from hermclaw.tools.protocol_tools import TwitterSearchTool, SpotifyTool, HomeAssistantTool
+from hermclaw.tools.web_tools import UrlReadTool, WebSearchTool, WebReadabilityTool, FirecrawlScrapeTool
+from hermclaw.tools.protocol_tools import (
+    TwitterSearchTool, SpotifyTool, HomeAssistantTool, PhilipsHueTool, SonosTool, BluetoothTool,
+)
 from hermclaw.tools.model_catalog_tool import ModelCatalogTool
 
 logger = structlog.get_logger(__name__)
@@ -204,15 +207,24 @@ async def build_agent_runtime(
     # Video & additional media
     dispatcher.register(VideoGenerateTool())
     dispatcher.register(ElevenLabsTTS())
+    dispatcher.register(MusicGenerateTool())
 
-    # Additional search providers
+    # Additional search & web scraping
     dispatcher.register(ExaSearchTool())
     dispatcher.register(TavilySearchTool())
+    dispatcher.register(WebReadabilityTool())
+    dispatcher.register(FirecrawlScrapeTool())
 
-    # Protocol integrations
+    # Code intelligence
+    dispatcher.register(LSPTool())
+
+    # Protocol & smart home integrations
     dispatcher.register(TwitterSearchTool())
     dispatcher.register(SpotifyTool())
     dispatcher.register(HomeAssistantTool())
+    dispatcher.register(PhilipsHueTool())
+    dispatcher.register(SonosTool())
+    dispatcher.register(BluetoothTool())
 
     # Session search -- the agent's episodic recall tool.
     dispatcher.register(SessionSearchTool(memory_store))

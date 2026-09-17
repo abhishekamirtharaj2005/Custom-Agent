@@ -17,12 +17,14 @@ import json
 import os
 import re
 import time
+import hashlib
+import hmac
 from typing import Any, Optional, Set
 
 import httpx
 import structlog
 
-from hermclaw.body.channels.base import ChannelAdapter
+from hermclaw.body.channels.base import ChannelAdapter, ChannelHealth, IncomingMessage, OutgoingMessage
 
 logger = structlog.get_logger(__name__)
 
@@ -401,3 +403,286 @@ class RelayConnector:
         if self._connected:
             await self._ws.close()
             self._connected = False
+
+
+# ---------------------------------------------------------------------------
+# Matrix Protocol Adapter
+# ---------------------------------------------------------------------------
+
+
+class MatrixAdapter(ChannelAdapter):
+    """Matrix Client-Server API messaging adapter."""
+
+    name = "matrix"
+
+    def __init__(self, homeserver: str = "https://matrix.org", access_token: str = "", room_id: str = "") -> None:
+        super().__init__()
+        self._homeserver = homeserver.rstrip("/")
+        self._token = access_token
+        self._default_room = room_id
+        self._client = httpx.AsyncClient(timeout=30.0)
+
+    async def start(self) -> None:
+        logger.info("matrix.started", homeserver=self._homeserver)
+
+    async def stop(self) -> None:
+        await self._client.aclose()
+
+    async def send(self, message: OutgoingMessage) -> None:
+        target_room = message.reply_to or self._default_room
+        await self.send_message(target_room, message.text)
+
+    def health(self) -> ChannelHealth:
+        connected = bool(self._token)
+        return ChannelHealth(connected=connected, detail=f"Matrix homeserver: {self._homeserver}")
+
+    async def send_message(self, room_id: str, text: str, **kwargs: Any) -> bool:
+        if not self._token:
+            logger.warning("matrix.token_missing")
+            return False
+        try:
+            txn_id = int(time.time() * 1000)
+            url = f"{self._homeserver}/_matrix/client/v3/rooms/{room_id}/send/m.room.message/{txn_id}"
+            resp = await self._client.put(
+                url,
+                headers={"Authorization": f"Bearer {self._token}"},
+                json={"msgtype": "m.text", "body": text},
+            )
+            resp.raise_for_status()
+            return True
+        except Exception as exc:
+            logger.error("matrix.send_failed", error=str(exc)[:100])
+            return False
+
+
+# ---------------------------------------------------------------------------
+# Google Chat Webhook & Spaces Adapter
+# ---------------------------------------------------------------------------
+
+
+class GoogleChatAdapter(ChannelAdapter):
+    """Google Chat incoming webhook and spaces messaging adapter."""
+
+    name = "google_chat"
+
+    def __init__(self, webhook_url: str = "") -> None:
+        super().__init__()
+        self._webhook_url = webhook_url
+        self._client = httpx.AsyncClient(timeout=25.0)
+
+    async def start(self) -> None:
+        logger.info("google_chat.started")
+
+    async def stop(self) -> None:
+        await self._client.aclose()
+
+    async def send(self, message: OutgoingMessage) -> None:
+        target = message.reply_to or self._webhook_url
+        await self.send_message(target, message.text)
+
+    def health(self) -> ChannelHealth:
+        return ChannelHealth(connected=bool(self._webhook_url), detail="Google Chat webhook configured")
+
+    async def send_message(self, webhook_or_space: str, text: str, **kwargs: Any) -> bool:
+        target_url = webhook_or_space if webhook_or_space.startswith("http") else self._webhook_url
+        if not target_url:
+            return False
+        try:
+            resp = await self._client.post(target_url, json={"text": text})
+            resp.raise_for_status()
+            return True
+        except Exception as exc:
+            logger.error("google_chat.send_failed", error=str(exc)[:100])
+            return False
+
+
+# ---------------------------------------------------------------------------
+# Feishu / Lark Enterprise Bot Adapter
+# ---------------------------------------------------------------------------
+
+
+class FeishuLarkAdapter(ChannelAdapter):
+    """Feishu (Lark) custom bot and open platform adapter."""
+
+    name = "feishu_lark"
+
+    def __init__(self, webhook_url: str = "", app_id: str = "", app_secret: str = "") -> None:
+        super().__init__()
+        self._webhook_url = webhook_url
+        self._app_id = app_id
+        self._app_secret = app_secret
+        self._client = httpx.AsyncClient(timeout=25.0)
+
+    async def start(self) -> None:
+        logger.info("feishu_lark.started")
+
+    async def stop(self) -> None:
+        await self._client.aclose()
+
+    async def send(self, message: OutgoingMessage) -> None:
+        await self.send_message(message.reply_to, message.text)
+
+    def health(self) -> ChannelHealth:
+        connected = bool(self._webhook_url or (self._app_id and self._app_secret))
+        return ChannelHealth(connected=connected, detail="Feishu/Lark bot active")
+
+    async def send_message(self, target: str, text: str, **kwargs: Any) -> bool:
+        url = target if target.startswith("http") else self._webhook_url
+        if not url:
+            return False
+        try:
+            payload = {
+                "msg_type": "text",
+                "content": {"text": text},
+            }
+            resp = await self._client.post(url, json=payload)
+            resp.raise_for_status()
+            return True
+        except Exception as exc:
+            logger.error("feishu_lark.send_failed", error=str(exc)[:100])
+            return False
+
+
+# ---------------------------------------------------------------------------
+# Mattermost Team Chat Adapter
+# ---------------------------------------------------------------------------
+
+
+class MattermostAdapter(ChannelAdapter):
+    """Mattermost incoming webhook and bot API adapter."""
+
+    name = "mattermost"
+
+    def __init__(self, server_url: str = "", token: str = "", default_channel: str = "") -> None:
+        super().__init__()
+        self._server_url = server_url.rstrip("/")
+        self._token = token
+        self._default_channel = default_channel
+        self._client = httpx.AsyncClient(timeout=25.0)
+
+    async def start(self) -> None:
+        logger.info("mattermost.started", server=self._server_url)
+
+    async def stop(self) -> None:
+        await self._client.aclose()
+
+    async def send(self, message: OutgoingMessage) -> None:
+        target = message.reply_to or self._default_channel
+        await self.send_message(target, message.text)
+
+    def health(self) -> ChannelHealth:
+        connected = bool(self._server_url and self._token)
+        return ChannelHealth(connected=connected, detail=f"Mattermost: {self._server_url}")
+
+    async def send_message(self, channel: str, text: str, **kwargs: Any) -> bool:
+        try:
+            if self._server_url.endswith("/hooks/") or "hooks" in self._server_url:
+                resp = await self._client.post(self._server_url, json={"text": text, "channel": channel})
+            else:
+                resp = await self._client.post(
+                    f"{self._server_url}/api/v4/posts",
+                    headers={"Authorization": f"Bearer {self._token}"},
+                    json={"channel_id": channel, "message": text},
+                )
+            resp.raise_for_status()
+            return True
+        except Exception as exc:
+            logger.error("mattermost.send_failed", error=str(exc)[:100])
+            return False
+
+
+# ---------------------------------------------------------------------------
+# Twilio SMS / WhatsApp REST Client
+# ---------------------------------------------------------------------------
+
+
+class TwilioSMSAdapter(ChannelAdapter):
+    """Twilio programmable SMS and WhatsApp messaging adapter."""
+
+    name = "twilio_sms"
+
+    def __init__(self, account_sid: str = "", auth_token: str = "", from_number: str = "") -> None:
+        super().__init__()
+        self._sid = account_sid
+        self._token = auth_token
+        self._from_number = from_number
+        self._client = httpx.AsyncClient(timeout=25.0)
+
+    async def start(self) -> None:
+        logger.info("twilio_sms.started")
+
+    async def stop(self) -> None:
+        await self._client.aclose()
+
+    async def send(self, message: OutgoingMessage) -> None:
+        await self.send_message(message.reply_to, message.text)
+
+    def health(self) -> ChannelHealth:
+        connected = bool(self._sid and self._token and self._from_number)
+        return ChannelHealth(connected=connected, detail=f"Twilio from {self._from_number}")
+
+    async def send_message(self, to_number: str, text: str, **kwargs: Any) -> bool:
+        if not (self._sid and self._token and self._from_number):
+            logger.warning("twilio.credentials_missing")
+            return False
+        try:
+            url = f"https://api.twilio.com/2010-04-01/Accounts/{self._sid}/Messages.json"
+            resp = await self._client.post(
+                url,
+                auth=(self._sid, self._token),
+                data={"From": self._from_number, "To": to_number, "Body": text},
+            )
+            resp.raise_for_status()
+            return True
+        except Exception as exc:
+            logger.error("twilio.send_failed", error=str(exc)[:100])
+            return False
+
+
+# ---------------------------------------------------------------------------
+# Universal Generic Webhook Adapter
+# ---------------------------------------------------------------------------
+
+
+class GenericWebhookAdapter(ChannelAdapter):
+    """Universal outbound webhook adapter with HMAC-SHA256 signatures."""
+
+    name = "generic_webhook"
+
+    def __init__(self, webhook_url: str = "", secret: str = "") -> None:
+        super().__init__()
+        self._webhook_url = webhook_url
+        self._secret = secret
+        self._client = httpx.AsyncClient(timeout=25.0)
+
+    async def start(self) -> None:
+        logger.info("generic_webhook.started")
+
+    async def stop(self) -> None:
+        await self._client.aclose()
+
+    async def send(self, message: OutgoingMessage) -> None:
+        target = message.reply_to or self._webhook_url
+        await self.send_message(target, message.text)
+
+    def health(self) -> ChannelHealth:
+        return ChannelHealth(connected=bool(self._webhook_url), detail=f"Webhook: {self._webhook_url[:40]}")
+
+    async def send_message(self, target_url: str, text: str, **kwargs: Any) -> bool:
+        url = target_url if target_url.startswith("http") else self._webhook_url
+        if not url:
+            return False
+        try:
+            payload = json.dumps({"text": text, "timestamp": time.time(), "extra": kwargs})
+            headers = {"Content-Type": "application/json"}
+            if self._secret:
+                sig = hmac.new(self._secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+                headers["X-HermClaw-Signature"] = f"sha256={sig}"
+
+            resp = await self._client.post(url, content=payload, headers=headers)
+            resp.raise_for_status()
+            return True
+        except Exception as exc:
+            logger.error("generic_webhook.send_failed", error=str(exc)[:100])
+            return False
+

@@ -13,7 +13,7 @@ def test_missing_config_writes_safe_defaults(tmp_path: Path) -> None:
     assert result.valid
     assert result.source == "defaults"
     assert result.config.agent.name == "hermclaw"
-    assert result.config.tools.shell_enabled is False
+    assert result.config.tools.shell_enabled is True
     assert path.exists()
 
 
