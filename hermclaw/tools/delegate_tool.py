@@ -67,20 +67,24 @@ class DelegateTool(ToolABC):
         return ToolSpec(
             name="delegate",
             description=(
-                "Delegate a task to a sub-agent for parallel execution. "
-                "Actions: spawn (start a new sub-agent), status (check on a task), "
-                "list (show all tasks), collect (get result of a completed task). "
-                "Use this to break complex tasks into parallel sub-tasks."
+                "Delegate tasks to parallel sub-agents or an autonomous multi-agent swarm. "
+                "Actions: swarm (execute coordinated multi-specialist pipeline: researcher -> coder -> reviewer), "
+                "roles (list available swarm personas), spawn (start a sub-agent), "
+                "status (check task status), list (show all tasks), collect (retrieve result)."
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "action": {
                         "type": "string",
-                        "enum": ["spawn", "status", "list", "collect"],
-                        "description": "Delegation action.",
+                        "enum": ["swarm", "roles", "spawn", "status", "list", "collect"],
+                        "description": "Delegation or swarm action.",
                     },
-                    "prompt": {"type": "string", "description": "Task prompt for the sub-agent (spawn)."},
+                    "prompt": {"type": "string", "description": "Task prompt for the sub-agent or swarm."},
+                    "roles": {
+                        "type": "string",
+                        "description": "Comma-separated specialist roles for swarm (e.g. 'researcher,coder,reviewer'). Default: researcher,coder,reviewer.",
+                    },
                     "task_id": {"type": "string", "description": "Task ID to check or collect (status/collect)."},
                 },
                 "required": ["action"],
@@ -90,7 +94,46 @@ class DelegateTool(ToolABC):
     async def execute(self, args: dict[str, Any]) -> ToolResult:
         action = args.get("action", "")
 
-        if action == "spawn":
+        if action == "roles":
+            from hermclaw.brain.swarm import SwarmOrchestrator
+            orch = SwarmOrchestrator()
+            roles = orch.list_roles()
+            lines = ["🤖 **Available Multi-Agent Swarm Personas**:"]
+            for r in roles:
+                lines.append(f"  • **{r['role'].upper()}** ({r['title']})")
+                lines.append(f"    {r['description']}")
+                lines.append(f"    Preferred Tools: {', '.join(r['preferred_tools'])}")
+            return ToolResult(ok=True, output="\n".join(lines), metadata={"roles": roles})
+
+        elif action == "swarm":
+            prompt = args.get("prompt", "")
+            if not prompt:
+                return ToolResult(ok=False, output="", error="'prompt' required for swarm action.")
+
+            roles_arg = args.get("roles", "")
+            roles_list = [r.strip().lower() for r in roles_arg.split(",") if r.strip()] or [
+                "researcher", "coder", "reviewer"
+            ]
+
+            from hermclaw.brain.swarm import SwarmOrchestrator
+            orch = SwarmOrchestrator(agent_executor=self._agent_factory)
+            result = await orch.execute_swarm_pipeline(task=prompt, roles=roles_list)
+
+            lines = [
+                f"🐝 **Multi-Agent Swarm Pipeline Completed** ({result['total_duration_seconds']}s)",
+                f"Roles: {' ➔ '.join(result['roles_executed'])}",
+                "",
+            ]
+            for step in result["steps"]:
+                lines.append(f"### {step['title']} ({step['duration_seconds']}s)")
+                lines.append(f"{step['output']}")
+                lines.append("")
+
+            lines.append("### 🏁 Final Synthesis")
+            lines.append(result["final_synthesis"])
+            return ToolResult(ok=True, output="\n".join(lines), metadata=result)
+
+        elif action == "spawn":
             prompt = args.get("prompt", "")
             if not prompt:
                 return ToolResult(ok=False, output="", error="'prompt' required for spawn.")

@@ -19,6 +19,13 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 from hermclaw.body.agents_registry import AgentsRegistry
 from hermclaw.brain.profiles import ProfileManager
 from hermclaw.brain.reflection import reflect as run_reflection
@@ -275,6 +282,55 @@ async def _run_impl(config_path: Path, profile: str, prompt: str) -> None:
         print(clean_text)
     finally:
         await runtime.aclose()
+
+
+# =============================================================================
+# voice (hands-free Jarvis mode)
+# =============================================================================
+
+
+@app.command()
+def voice(
+    ctx: typer.Context,
+    preset: str = typer.Option("en-female", "--preset", "-p", help="Voice preset name (e.g. en-female, en-male, en-in-male)"),
+) -> None:
+    """Hands-free voice assistant ('Jarvis' mode) with speech activation, STT, and spoken replies."""
+    _run(_voice_impl(ctx.obj["config_path"], ctx.obj["profile"], preset))
+
+
+async def _voice_impl(config_path: Path, profile: str, preset: str) -> None:
+    from hermclaw.body.voice_assistant import start_voice_assistant
+    result = _load_or_die(config_path)
+    runtime = await build_agent_runtime(profile, result.config)
+    try:
+        await start_voice_assistant(runtime, voice_preset=preset)
+    finally:
+        await runtime.aclose()
+
+
+# =============================================================================
+# briefing (morning standup & executive briefing)
+# =============================================================================
+
+
+@app.command()
+def briefing(
+    ctx: typer.Context,
+    debrief: bool = typer.Option(False, "--debrief", "-d", help="Run nightly debrief instead of morning briefing"),
+) -> None:
+    """Generate and display the curated executive morning briefing or nightly debrief."""
+    _run(_briefing_impl(ctx.obj["config_path"], ctx.obj["profile"], debrief))
+
+
+async def _briefing_impl(config_path: Path, profile: str, debrief: bool) -> None:
+    from hermclaw.tools.briefing_tool import BriefingTool
+    b_tool = BriefingTool()
+    action = "nightly_debrief" if debrief else "morning_briefing"
+    res = await b_tool.execute({"action": action})
+    if res.ok:
+        console.print(res.output)
+    else:
+        console.print(f"[red]Error generating briefing: {res.error}[/red]")
 
 
 # =============================================================================

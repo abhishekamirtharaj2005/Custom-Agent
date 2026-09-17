@@ -448,9 +448,12 @@ class ComputerUseTool(ToolABC):
         snap_path = Path.home() / ".hermclaw" / "screenshots" / "last_screen.png"
         snap_path.parent.mkdir(parents=True, exist_ok=True)
         try:
+            from hermclaw.security.privacy_guard import default_privacy_guard
             img = pyautogui.screenshot()
+            img, was_masked = default_privacy_guard.mask_screenshot_if_sensitive(img, active_info)
             img.save(str(snap_path))
-            snap_msg = f"Visual snapshot saved to: {snap_path}"
+            mask_note = " [🔒 Privacy Masked]" if was_masked else ""
+            snap_msg = f"Visual snapshot saved to: {snap_path}{mask_note}"
         except Exception as exc:
             snap_msg = f"Visual snapshot not captured: {exc}"
 
@@ -489,6 +492,24 @@ class ComputerUseTool(ToolABC):
         else:
             img = pyautogui.screenshot()
             region_str = ""
+
+        # Apply privacy shield if sensitive window is active
+        active_title = ""
+        try:
+            import pygetwindow as gw
+            act = gw.getActiveWindow()
+            if act:
+                active_title = act.title
+        except Exception:
+            pass
+
+        try:
+            from hermclaw.security.privacy_guard import default_privacy_guard
+            img, was_masked = default_privacy_guard.mask_screenshot_if_sensitive(img, active_title)
+            if was_masked:
+                region_str += " [🔒 Privacy Masked: sensitive window detected]"
+        except Exception:
+            pass
 
         img.save(output_path)
         return ToolResult(ok=True, output=f"Screenshot saved: {output_path} (size: {img.size[0]}x{img.size[1]}){region_str}")

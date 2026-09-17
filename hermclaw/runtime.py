@@ -189,6 +189,18 @@ async def build_agent_runtime(
     dispatcher.register(ProcessManagerTool())
     dispatcher.register(ComputerUseTool())
 
+    # Screen vision, UI element grounding & macro automation
+    from hermclaw.tools.screen_vision import ScreenVisionTool
+    dispatcher.register(ScreenVisionTool())
+
+    # Proactive secretary & executive briefing
+    from hermclaw.tools.briefing_tool import BriefingTool
+    dispatcher.register(BriefingTool())
+
+    # Second Brain & Knowledge Vault (Obsidian sync)
+    from hermclaw.tools.vault_tool import KnowledgeVaultTool
+    dispatcher.register(KnowledgeVaultTool())
+
     # Video & additional media
     dispatcher.register(VideoGenerateTool())
     dispatcher.register(ElevenLabsTTS())
