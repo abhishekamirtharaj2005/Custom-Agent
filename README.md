@@ -3,15 +3,17 @@
 </h1>
 
 <p align="center">
-  <strong>A unified, self-improving personal AI agent with 40+ tools, no guardrails, and self-learning.</strong>
+  <strong>A unified, self-improving personal AI agent with 51+ tools, live screen vision, desktop control, and self-learning.</strong>
 </p>
 
 <p align="center">
-  <a href="#install">Install</a> •
+  <a href="#key-features">Features</a> •
+  <a href="#install">Install & Setup</a> •
   <a href="#quick-start">Quick Start</a> •
-  <a href="#tools">40+ Tools</a> •
-  <a href="#self-learning">Self-Learning</a> •
-  <a href="#model-providers">Model Providers</a> •
+  <a href="#tools">51+ Tools</a> •
+  <a href="#computer-use--screen-vision">Computer Control</a> •
+  <a href="#self-learning--second-brain">Self-Learning</a> •
+  <a href="#messaging-channels">14 Channels</a> •
   <a href="#commands">Commands</a>
 </p>
 
@@ -19,19 +21,21 @@
 
 ## What is HermClaw?
 
-HermClaw merges two frameworks into one self-improving AI agent:
+HermClaw merges the autonomous ReAct cognitive loop of **Hermes ☤** with the robust multi-channel body and protocol gateway of **OpenClaw 🦞** into a single, production-grade personal AI agent:
 
-- **Body** (from OpenClaw): local-first gateway, messaging channels, cron scheduler
-- **Brain** (from Hermes Agent): ReAct tool-calling loop, SQLite memory, context compression, skill evolution
+- **Body** (from OpenClaw): Local-first gateway, 14 messaging channels, cron scheduler, smart home protocols (Hue, Sonos, Bluetooth, Home Assistant).
+- **Brain** (from Hermes): ReAct tool-calling loop, persistent SQLite & vector memory, context compression, self-reflection, auto-skill generation, and multi-agent swarm delegation.
 
-**Key principles:**
-- 🔓 **No guardrails** — full system access by default (shell, filesystem, apps)
-- 🧠 **Self-learning** — reflection loop distills experience into memory, skills, and a concept graph
-- 🏠 **Local-first** — runs on your machine with Ollama, no cloud API key required
-- 🛠️ **40+ tools** — file I/O, shell, git, browser, code execution, web search, TTS, vision, PDF, voice cloning, and more
-- 🎮 **Fun** — virtual pet (5 evolution stages), achievements system, learning graph
-- 🌐 **Multi-provider** — Ollama, OpenAI, Anthropic, Google Gemini, Groq, OpenRouter, AWS Bedrock
-- 🔌 **Extensible** — plugin system, custom skills, protocol integrations (Twitter, Spotify, Home Assistant)
+### Key Principles
+
+- 🖥️ **Live Screen Awareness & Computer Control** — autonomous mouse navigation, keyboard input, hotkey macros, and vision-grounded UI element detection.
+- 🔓 **Full System Access** — unrestricted shell commands, file operations, background processes, and application launching with configurable risk policies.
+- 🧠 **Self-Learning & Second Brain** — automatic reflection loop, SQLite concept graph, auto-generated skills, and bi-directional Obsidian markdown vault synchronization.
+- 🛠️ **51+ Built-in Tools** — LSP code intelligence, deep web scraping (Firecrawl/Readability), media generation, audio/music synthesis, system diagnostics, and hardware control.
+- 🗣️ **Jarvis Voice Assistant** — hands-free conversational voice mode with live microphone listening, wake-word sensitivity, voice cloning, and spoken responses.
+- 🐝 **Multi-Agent Swarms** — coordinated sub-agent teams (Planner, Researcher, Coder, Reviewer, Synthesizer) tackling complex, multi-stage goals.
+- 💬 **14+ Messaging Channels** — seamlessly operate across Telegram, Discord, Slack, WhatsApp, Signal, Matrix, Teams, Google Chat, Feishu/Lark, Mattermost, SMS, and Webhooks simultaneously.
+- 🏠 **Local-First & Multi-Provider** — runs 100% locally and free with Ollama, or connects to Claude, GPT-4o, Gemini 2.5, Groq, OpenRouter, and AWS Bedrock.
 
 ---
 
@@ -41,11 +45,13 @@ HermClaw merges two frameworks into one self-improving AI agent:
 |---|---|
 | **Python 3.11+** | `python --version` |
 | **Git** | `git --version` |
-| **Ollama** (recommended) | `ollama --version` — [Install Ollama](https://ollama.com/download) |
+| **Ollama** (recommended for local use) | `ollama --version` — [Install Ollama](https://ollama.com/download) |
 
 ---
 
 ## Install
+
+Clone the repository and run the unified interactive setup wizard:
 
 ```bash
 git clone https://github.com/abhishekamirtharaj2005/Custom-Agent.git
@@ -53,20 +59,25 @@ cd Custom-Agent
 python install.py
 ```
 
-The setup wizard will interactively ask you:
+### 🧙 8-Step Interactive Setup Wizard
 
-1. **Model Provider** — Ollama (local/free), OpenAI, Anthropic, Groq, OpenRouter, or custom
-2. **Model** — Pick from available models for your chosen provider
-3. **API Key** — Enter your API key (or skip for Ollama)
-4. **Chat Platforms** — Enable Telegram, Discord, Slack bots (optional)
-5. **Security** — Shell access and approval mode
+The installer walks you through a comprehensive onboarding experience to configure your entire agent environment:
+
+1. **Identity & Personalization** — Set the agent's name, your name, and system language (16 languages supported).
+2. **Primary AI Model Provider** — Select between Ollama (local/free), OpenAI, Anthropic Claude, Google Gemini, Groq, OpenRouter, AWS Bedrock, or custom OpenAI-compatible endpoints.
+3. **Fallback & Auxiliary Models** — Configure vision models, ultra-fast reasoning fallback models, and local offline fallbacks.
+4. **Messaging Channels Setup** — Connect any of the 14 platforms (Telegram, Discord, Slack, Matrix, Google Chat, Feishu/Lark, Mattermost, Twilio SMS/WhatsApp, Signal, Teams, Webhooks) with guided token and credential entry.
+5. **Web Search & Research Keys** — Configure Tavily, Serper, SerpAPI, Brave Search, and Firecrawl API keys for deep web crawling.
+6. **Voice, Music & Media Keys** — Configure ElevenLabs TTS, Suno AI music generation, and Fal.ai / DALL-E image models.
+7. **Smart Home & Local Hardware** — Enter Philips Hue bridge IP & app keys, Sonos speaker IPs, and Home Assistant endpoints.
+8. **Security & Autonomy Mode** — Choose execution mode (Autonomous / No Guardrails vs Interactive Approval Mode for shell commands).
 
 Then it automatically:
-- ✅ Installs hermclaw + required extras
-- ✅ Generates `~/.hermclaw/hermclaw.yaml`
-- ✅ Saves API keys to `~/.hermclaw/.env`
-- ✅ Pulls Ollama model (if applicable)
-- ✅ Verifies the installation
+- ✅ Installs HermClaw and all required dependencies into your environment
+- ✅ Generates your fully-configured `~/.hermclaw/hermclaw.yaml`
+- ✅ Safely writes all API keys and tokens to `~/.hermclaw/.env`
+- ✅ Pulls your selected Ollama model (e.g. `gemma4:12b`)
+- ✅ Runs runtime diagnostics and self-tests
 
 ### Re-run setup anytime
 
@@ -81,7 +92,7 @@ hermclaw setup
 <details>
 <summary>Click to expand manual installation steps</summary>
 
-### Option 1: pip install
+### Option 1: pip install editable
 
 ```bash
 git clone https://github.com/abhishekamirtharaj2005/Custom-Agent.git
@@ -92,39 +103,33 @@ python -m venv .venv
 pip install -e .
 ```
 
-### Option 2: With all extras
+### Option 2: Full installation with all extras
 
 ```bash
 pip install -e ".[all]"
 ```
 
-### Option 3: requirements.txt
-
-```bash
-pip install -r requirements.txt
-pip install -e .
-```
-
-### Optional extras
+### Option 3: Targeted extras
 
 ```bash
 # Model providers
 pip install -e ".[anthropic]"        # Claude
-pip install -e ".[openai]"           # GPT-4o
+pip install -e ".[openai]"           # OpenAI GPT-4o
+pip install -e ".[gemini]"           # Native Google Gemini
+pip install -e ".[bedrock]"          # AWS Bedrock
 
-# Features
-pip install -e ".[browser]"          # Playwright browser
-pip install -e ".[voice]"            # Text-to-speech
-pip install -e ".[pdf]"              # PDF extraction
+# Automation & Vision
+pip install -e ".[browser]"          # Playwright headless browser
+pip install -e ".[vision]"           # PyAutoGUI, OpenCV, Pillow
 
-# Messaging channels
+# Audio & Voice
+pip install -e ".[voice]"            # pyttsx3, SpeechRecognition, sounddevice
+
+# Channels
 pip install -e ".[telegram,discord,slack]"
-
-# Everything
-pip install -e ".[all]"
 ```
 
-### Quick Start (manual)
+### Quick Start (manual verification)
 
 ```bash
 ollama pull gemma4:12b && ollama serve
@@ -138,396 +143,372 @@ hermclaw chat
 
 ## Quick Start
 
-After installation (either method), just run:
-
+### 1. Interactive Terminal Chat
 ```bash
 hermclaw chat
 ```
 
-That's it. No API keys needed for local models.
-
-### One-shot mode (for scripting)
-
+### 2. Hands-Free Jarvis Voice Mode
+Speak directly to HermClaw through your microphone and hear spoken responses in real-time:
 ```bash
-hermclaw run "list all Python files in the current directory"
+hermclaw voice
 ```
 
-### Start the full gateway (multi-channel)
-
+### 3. Executive Briefing
+Generate your morning agenda, weather, active goals, and unread priority items:
 ```bash
-hermclaw serve                       # foreground
-hermclaw serve --daemonize           # detached (POSIX only)
+hermclaw briefing            # Morning executive briefing
+hermclaw briefing --debrief   # Evening summary & accomplishments
+```
+
+### 4. One-Shot Command Execution
+Send a single goal or instruction directly from the command line:
+```bash
+hermclaw run "Inspect the git status, run pytest, and summarize any failing tests"
+```
+
+### 5. Multi-Channel Gateway Daemon
+Launch the background server to handle all connected chat bots, webhooks, and cron jobs:
+```bash
+hermclaw serve                       # Foreground
+hermclaw serve --daemonize           # Detached background process (POSIX)
 ```
 
 ---
 
-## Tools
+## 51+ Built-in Tools
 
-HermClaw comes with **40+ built-in tools** the agent can use autonomously:
+HermClaw provides 51 registered tools out of the box, organized into functional suites:
 
-### 📁 File & Code (8 tools)
+### 📁 File & Code Intelligence (9 tools)
 | Tool | Description |
 |---|---|
-| `file_read` | Read files with line ranges |
-| `file_write` | Create and write files |
-| `file_edit` | Targeted search-and-replace editing |
-| `list_dir` | List directory contents |
-| `grep_search` | Regex search across files |
-| `code_exec` | Execute Python/JavaScript/Bash in sandboxed environments |
-| `shell` | Run any shell command (PowerShell, Bash, Cmd) |
-| `git` | Git checkpoint, diff, rollback, stash, branch, log |
+| `file_read` | Read files with selective line ranges and byte offsets |
+| `file_write` | Create or overwrite files anywhere on the filesystem |
+| `file_edit` | Surgical search-and-replace editing with validation |
+| `list_dir` | Recursive directory inspection with file sizes and counts |
+| `grep_search` | Fast regex and pattern matching across project files |
+| `code_exec` | Execute Python, JavaScript, and Bash in isolated runtimes |
+| `shell` | Direct shell command execution (PowerShell, Bash, Cmd) |
+| `git` | Complete Git version control (checkpoints, diffs, rollbacks, stashes, logs) |
+| `lsp` | **Language Server Protocol client** — diagnostics, definition jumps, hover docstrings, code completions, workspace symbols, and references |
 
-### 🌐 Web & Browser (3 tools)
+### 🌐 Web & Deep Scraping (5 tools)
 | Tool | Description |
 |---|---|
-| `web_search` | DuckDuckGo search with result extraction |
-| `url_read` | Extract and parse content from URLs |
-| `browser` | Full Playwright browser automation (click, type, screenshot, JS eval, navigate) |
+| `web_search` | DuckDuckGo web search with snippet extraction |
+| `url_read` | Fetch and parse web content into readable markdown |
+| `browser` | Full Playwright automation (navigate, click, type, screenshot, evaluate JS) |
+| `web_readability` | Clean article extraction removing ads, cookie notices, and navigation noise |
+| `firecrawl_scrape` | Deep recursive crawler, sitemap discovery, and structured data extraction |
 
-### 🎨 Media & Documents (7 tools)
+### 🖱️ Computer Control & Screen Vision (2 tools)
 | Tool | Description |
 |---|---|
-| `image_generate` | DALL-E 3 / fal.ai image generation |
-| `vision` | Image analysis (GPT-4o / Ollama LLaVA) |
-| `tts` | Text-to-speech with 15+ voices (pyttsx3) |
-| `elevenlabs_tts` | Premium ElevenLabs TTS with voice selection |
-| `video_generate` | Video generation from text prompts |
-| `pdf_read` | Extract text from PDF files |
-| `transcribe` | Audio transcription (Whisper) |
+| `computer` | Complete desktop control — mouse clicks, moves, drags, typing, shortcuts, and screenshots |
+| `screen_vision` | Multimodal live screen inspection, UI element coordinate grounding, and multi-step desktop macros |
 
-### 🎤 Voice (2 tools)
+### 🎨 Media & Creative (8 tools)
 | Tool | Description |
 |---|---|
-| `voice_clone` | Clone voices from audio samples |
-| `voice_effects` | Apply audio effects (pitch, speed, reverb) |
+| `image_generate` | DALL-E 3 and fal.ai high-resolution image generation |
+| `vision` | Multimodal image and screenshot comprehension (GPT-4o / Ollama LLaVA) |
+| `tts` | Local offline text-to-speech with 15+ selectable system voices |
+| `elevenlabs_tts` | Ultra-realistic ElevenLabs cloud voice synthesis |
+| `music_generate` | AI music track generation (Suno/ElevenLabs) with local harmonic synthesis fallback |
+| `video_generate` | Prompt-to-video generation via creative generative APIs |
+| `pdf_read` | High-fidelity text and table extraction from PDF documents |
+| `transcribe` | Audio-to-text transcription via Whisper |
 
-### 🧠 Memory & Intelligence (4 tools)
+### 🎤 Voice & Audio Effects (2 tools)
 | Tool | Description |
 |---|---|
-| `memory` | Persistent memory with semantic search + keyword fallback |
-| `learning_graph` | Concept relationship graph with confidence tracking + ASCII visualization |
-| `session_search` | Search across conversation history |
-| `model_catalog` | List models, check current model, view pricing/context info |
+| `voice_clone` | Clone distinct voices from short reference audio files |
+| `voice_effects` | Apply audio transformations (pitch shift, tempo scaling, room reverb) |
 
-### 📋 Projects & Tasks (4 tools)
+### 🏠 Smart Home & Local Hardware (4 tools)
 | Tool | Description |
 |---|---|
-| `kanban` | Full project management board (columns, cards, labels, priorities) |
-| `todo` | Quick todo list with categories and priorities |
-| `goals` | Autonomous long-running goal tracking with sub-goals |
-| `delegate` | Spawn sub-agents for parallel work |
+| `home_assistant` | Control Home Assistant entities (lights, climate, switches, automations) |
+| `openhue` | Philips Hue control — discover bridges, adjust brightness, colors, and trigger scenes |
+| `sonos` | Sonos speaker control — discover devices, play/pause, adjust volume, queue tracks |
+| `blucli` | Bluetooth device discovery, pairing, signal strength, and battery telemetry |
 
-### 🖥️ System (7 tools)
+### 🧠 Memory & Second Brain (5 tools)
 | Tool | Description |
 |---|---|
-| `app_launcher` | Open any app, URL, or file (40+ Windows app shortcuts) |
-| `clipboard` | Read/write system clipboard |
-| `notify` | System notifications (Windows toast/sound alerts) |
-| `system_info` | CPU, RAM, disk, network, GPU, process metrics |
-| `scheduler` | Cron jobs, intervals, one-shot timers |
-| `patch` | Apply unified diff patches to files |
-| `process` | Manage background processes (list, kill, monitor) |
+| `memory` | Long-term memory store with semantic vector search and keyword fallback |
+| `knowledge_vault` | **Obsidian Second Brain integration** — bi-directional markdown vault sync, daily notes, wikilinks, and automatic indexing |
+| `learning_graph` | Dynamic SQLite concept relationship graph with confidence tracking |
+| `session_search` | Deep search across historical conversation sessions and decisions |
+| `model_catalog` | Model registry with context sizes, parameter counts, and pricing |
 
-### 🔌 Protocol Integrations (3 tools)
+### 📋 Projects, Swarm & Executive (5 tools)
 | Tool | Description |
 |---|---|
-| `twitter_search` | Search Twitter/X for tweets and trends |
-| `spotify` | Control Spotify playback and search music |
-| `home_assistant` | Control smart home devices (lights, thermostat, switches) |
+| `kanban` | Full project board with columns, cards, labels, and priorities |
+| `todo` | Lightweight prioritized task management |
+| `goals` | Autonomous long-running goal tracking with milestone breakdown |
+| `delegate` | Spawn autonomous sub-agents or coordinate **multi-agent swarms** (Planner, Researcher, Coder, Reviewer) |
+| `briefing` | Executive secretary briefings — daily schedules, calendar reminders, weather, and open action items |
+
+### 🖥️ System & Automation (7 tools)
+| Tool | Description |
+|---|---|
+| `app_launcher` | Launch installed desktop applications, URLs, or files (40+ Windows shortcuts) |
+| `clipboard` | Read and manipulate the system clipboard |
+| `notify` | Send native desktop toast notifications and audio chimes |
+| `system_info` | Real-time monitoring of CPU, RAM, disk, network, GPU, and processes |
+| `scheduler` | Schedule cron expressions, recurring intervals, and one-shot reminders |
+| `patch` | Apply unified diff patches directly to files |
+| `process` | Inspect, monitor, and terminate background operating system processes |
+
+### 🔌 Protocol Integrations (2 tools)
+| Tool | Description |
+|---|---|
+| `twitter_search` | Search Twitter/X for live posts, user updates, and trending topics |
+| `spotify` | Search tracks, control playback, playlists, and volume on Spotify |
 
 ### 🎮 Fun & Gamification (2 tools)
 | Tool | Description |
 |---|---|
-| `pet` | ASCII virtual pet with 5 evolution stages, mood, hunger/energy tracking |
-| `achievements` | 24 achievements across 6 categories (unlock by using features) |
-
-### 🖱️ Computer Use (1 tool)
-| Tool | Description |
-|---|---|
-| `computer` | Desktop automation — screenshots, mouse clicks, keyboard input |
+| `pet` | Interactive virtual crab pet with 5 evolution stages, mood, hunger, and energy |
+| `achievements` | 24 unlockable achievements across 6 progression categories |
 
 ---
 
-## Self-Learning
+## Computer Use & Screen Vision
 
-HermClaw has a **3-layer self-learning system** that builds knowledge over time:
-
-### 1. Learning Graph
-A **SQLite-backed concept graph** that tracks what the agent has learned:
-- Store concepts with name, category, description, and confidence score (0→1)
-- Create relationships between concepts (11 types: `is_a`, `depends_on`, `prerequisite_for`, etc.)
-- Confidence grows automatically with repeated encounters
-- ASCII visualization of the knowledge graph
-
-### 2. Skill Growth Engine
-**Automatically creates new skills from repeated patterns:**
-- **Tier 1 (always on):** During reflection, if the agent notices repeated procedures, it auto-generates a draft SKILL.md file
-- **Tier 2 (opt-in):** `SkillEvolutionEngine` takes existing auto-generated skills and proposes improved/tighter steps
-- Deduplication prevents creating duplicate skills using token similarity matching
-
-### 3. Persistent Memory
-Long-term semantic memory across sessions:
-- Facts are stored and recalled via semantic search
-- The agent auto-recalls relevant memories at the start of each conversation
-- Cross-session persistence — restart the chat and it still remembers
-
-### How to test self-learning
+HermClaw can directly see your screen and control your keyboard and mouse to perform real-world tasks (such as opening applications, sending messages in WhatsApp or Telegram, or clicking desktop buttons):
 
 ```
-# Teach concepts
-> Learn this concept: "Python" is a programming language. Category: programming.
-
-# Connect concepts
-> Connect: "FastAPI" depends_on "Python"
-
-# Visualize the graph
-> Show me your learning graph
-
-# Save facts to memory
-> Remember: I prefer YAML for configuration files.
-
-# Trigger reflection
-> hermclaw reflect
+> Open WhatsApp and send "Meeting in 10 minutes" to Alex
 ```
+
+### How it works:
+1. **Live Visual Capture**: Captures screen frame buffers or active application windows.
+2. **Vision Element Grounding**: Uses multimodal LLMs to identify pixel coordinates for UI elements, text inputs, buttons, and icons.
+3. **Hardware-Level Input**: Dispatches native mouse clicks, drags, smooth scrolling, hotkey combinations (e.g. `Ctrl+Enter`, `Alt+Tab`), and text typing via PyAutoGUI.
+4. **Visual Loop Verification**: Inspects subsequent frames to confirm actions succeeded before taking the next step.
+
+---
+
+## Self-Learning & Second Brain
+
+HermClaw continuously improves itself without human intervention through a 3-layer architecture:
+
+### 1. The Learning Graph
+A SQLite-backed knowledge graph tracking concepts and semantic connections:
+- Stores facts with confidence ratings ($0.0 \to 1.0$) that strengthen with repeated verification.
+- Connects concepts using 11 relationship types (`depends_on`, `is_a`, `improves`, `causes`, etc.).
+- View your agent's mind at any time with ASCII visualization:
+  ```bash
+  > Show me your learning graph
+  ```
+
+### 2. Auto-Skill Growth Engine
+- **Tier 1 (Always On)**: During reflection, when the agent detects a repeated successful procedure, it writes a new `SKILL.md` file.
+- **Tier 2 (Evolution)**: Optimizes existing skills over time, refining instructions and parameter usage.
+- Deduplication prevents repetitive skills using token similarity analysis.
+
+### 3. Obsidian Second Brain Sync (`knowledge_vault`)
+HermClaw can manage your personal Obsidian vault:
+- Synchronize notes, research findings, and task summaries into organized markdown files.
+- Automatically create bi-directional `[[wikilinks]]` between related concepts.
+- Query and retrieve knowledge across your entire second brain.
+
+---
+
+## Messaging Channels
+
+Run HermClaw simultaneously across 14 messaging platforms:
+
+| Channel | Protocol / Adapter | Status | Setup |
+|---|---|---|---|
+| **Telegram** | `python-telegram-bot` (long-polling) | Native | Set `TELEGRAM_BOT_TOKEN` |
+| **Discord** | `discord.py` (WebSocket gateway) | Native | Set `DISCORD_BOT_TOKEN` |
+| **Slack** | Slack Bolt API (Socket Mode) | Native | Set `SLACK_BOT_TOKEN` + `SLACK_APP_TOKEN` |
+| **Matrix** | Matrix Client-Server REST API | Native | Set `MATRIX_HOMESERVER` + `MATRIX_ACCESS_TOKEN` |
+| **Google Chat** | Google Chat Webhook / Bot API | Native | Set `GOOGLE_CHAT_WEBHOOK_URL` |
+| **Feishu / Lark** | Lark Open Platform API | Native | Set `FEISHU_APP_ID` + `FEISHU_APP_SECRET` |
+| **Mattermost** | Mattermost REST & WebSocket API | Native | Set `MATTERMOST_URL` + `MATTERMOST_BOT_TOKEN` |
+| **Twilio (SMS/WhatsApp)** | Twilio Messaging API | Native | Set `TWILIO_ACCOUNT_SID` + `TWILIO_AUTH_TOKEN` |
+| **Signal** | `signal-cli` REST daemon | Native | Set `SIGNAL_HTTP_URL` + `SIGNAL_PHONE_NUMBER` |
+| **Microsoft Teams** | Bot Framework Webhook | Native | Set `TEAMS_WEBHOOK_URL` |
+| **Generic Webhooks** | HTTP POST Inbound / Outbound | Native | Configured in `hermclaw.yaml` |
+| **HTTP REST API** | FastAPI / Starlette on port 8080 | Native | Included with `hermclaw serve` |
+| **Interactive CLI** | Rich terminal interface | Native | `hermclaw chat` |
+| **Jarvis Voice** | Real-time audio stream | Native | `hermclaw voice` |
 
 ---
 
 ## Commands
 
+### CLI Entry Points
+
 | Command | Purpose |
 |---|---|
-| `hermclaw chat` | Interactive local conversation |
-| `hermclaw run "prompt"` | One-shot mode: send prompt, get response, exit |
-| `hermclaw serve` | Start the gateway (all channels + scheduler + HTTP API) |
-| `hermclaw setup` | Interactive setup wizard (model, provider, API keys, channels) |
-| `hermclaw doctor` | Diagnostics, first-run wizard (`--init`), auto-fix (`--fix`) |
+| `hermclaw chat` | Interactive terminal conversation session |
+| `hermclaw voice` | **Hands-free Jarvis voice mode** with live microphone and speaker |
+| `hermclaw briefing` | Generate morning executive briefing (use `--debrief` for evening review) |
+| `hermclaw run "prompt"` | Run a one-shot command or goal and print output |
+| `hermclaw serve` | Start the full gateway (all channels + scheduler + HTTP API) |
+| `hermclaw setup` | Interactive 8-step setup wizard (providers, channels, keys, hardware) |
+| `hermclaw doctor` | Diagnostics, health checks, first-run wizard (`--init`), auto-fix (`--fix`) |
 | `hermclaw reflect` | Manually trigger the self-learning reflection loop |
-| `hermclaw models` | List all available models in the catalog |
-| `hermclaw skills` | List, validate, and inspect skills |
-| `hermclaw sessions` | List, show, export, and delete sessions |
-| `hermclaw plugins` | List, install, uninstall, create plugins |
+| `hermclaw models` | List all supported models, context limits, and pricing |
+| `hermclaw skills` | List, inspect, validate, and test custom agent skills |
+| `hermclaw sessions` | Manage conversation sessions (list, export, inspect, delete) |
+| `hermclaw plugins` | Discover, install, validate, and create HermClaw plugins |
 
-### Chat commands (inside `hermclaw chat`)
+### In-Chat Slash Commands
 
-| Command | Purpose |
+| Command | Action |
 |---|---|
-| `/models` | List available models |
-| `/model <name>` | Switch model mid-conversation |
-| `/cost` | Show token usage and estimated cost |
-| `/clear` | Clear conversation history |
-| `/save <file>` | Export conversation to file |
-| `/load <file>` | Load conversation from file |
-| `/exit` or `Ctrl+C` | Exit chat |
-
-Every CLI command accepts `--config`, `--profile`, and `--json` globally.
+| `/models` | List all configured and available models |
+| `/model <name>` | Switch active model mid-conversation (e.g. `/model claude-sonnet-4-6`) |
+| `/cost` | Display cumulative token usage and estimated API cost |
+| `/clear` | Clear the current conversation context window |
+| `/save <file>` | Export current conversation session to a JSON/markdown file |
+| `/load <file>` | Load and resume a previously saved conversation session |
+| `/exit` | Exit the chat session |
 
 ---
 
 ## Configuration
 
-Everything lives in `~/.hermclaw/hermclaw.yaml`. The defaults are:
+All agent settings are managed via `~/.hermclaw/hermclaw.yaml`. Core defaults:
 
-| Setting | Default | Description |
-|---|---|---|
-| Model provider | `openai_compat` (Ollama) | Local model, no API key |
-| Model | `gemma4:12b` | Change to any Ollama model |
-| Shell access | **Enabled** | Full system access |
-| Approvals | **Off** | No confirmation prompts |
-| Filesystem scope | **Full** | Unrestricted file access |
-| Self-learning | **Enabled** | Reflection + skill evolution |
-| Context compression | **0.3** | Compress at 30% of context window |
-| Language | `en` | 16 languages available |
+```yaml
+agent:
+  name: "HermClaw"
+  language: "en"
+  workdir: "."
 
-See [`hermclaw.example.yaml`](hermclaw.example.yaml) for the fully-commented reference.
+brain:
+  model:
+    provider: "openai_compat"
+    model_name: "gemma4:12b"
+    api_base_env: "OLLAMA_API_BASE"
+  memory:
+    max_history_turns: 50
+    compression_threshold: 0.3
+  self_learning:
+    enabled: true
+    auto_skills: true
+    reflection_interval: 10
+
+security:
+  allow_shell: true
+  require_approval: false
+  risk_policy: "permissive"
+```
+
+See [`hermclaw.example.yaml`](hermclaw.example.yaml) for a fully-annotated reference file.
 
 ---
 
 ## Model Providers
 
-### Ollama (default — local, free)
-
+### Ollama (Default — Local & 100% Free)
 ```bash
 ollama pull gemma4:12b
 ollama serve
 hermclaw chat
 ```
 
-No config changes needed. Works out of the box.
-
-**Recommended local models:**
-
-| Model | Size | Best for |
-|---|---|---|
-| `gemma4:12b` | 7.6 GB | Default, great balance |
-| `gemma4:27b` | 17 GB | Better reasoning (needs 24GB+ RAM) |
-| `qwen3:8b` | 6.6 GB | Fast, multilingual |
-| `llama3.1:8b` | 4.7 GB | Lightweight |
-
-### Anthropic (Claude)
-
+### Anthropic Claude
 ```bash
-pip install -e ".[anthropic]"
+export ANTHROPIC_API_KEY="sk-ant-..."
 ```
-
 ```yaml
 brain:
   model:
     provider: "anthropic"
     model_name: "claude-sonnet-4-6"
-    api_key_env: "ANTHROPIC_API_KEY"
-```
-
-```bash
-export ANTHROPIC_API_KEY="your-key-here"          # Linux/macOS
-$env:ANTHROPIC_API_KEY = "your-key-here"           # Windows PowerShell
 ```
 
 ### Google Gemini
-
+```bash
+export GOOGLE_API_KEY="AIza..."
+```
 ```yaml
 brain:
   model:
     provider: "gemini"
     model_name: "gemini-2.5-flash"
-    api_key_env: "GOOGLE_API_KEY"
-```
-
-```bash
-export GOOGLE_API_KEY="your-key"
 ```
 
 ### OpenAI
-
+```bash
+export OPENAI_API_KEY="sk-..."
+```
 ```yaml
 brain:
   model:
     provider: "openai_compat"
     model_name: "gpt-4o"
-    api_key_env: "OPENAI_API_KEY"
-    api_base_env: null               # uses default OpenAI endpoint
 ```
 
-### Groq (fast cloud inference)
-
+### Groq (Ultra-Fast Cloud Inference)
+```bash
+export GROQ_API_KEY="gsk_..."
+```
 ```yaml
 brain:
   model:
     provider: "openai_compat"
     model_name: "llama-3.3-70b-versatile"
-    api_key_env: "GROQ_API_KEY"
-    api_base_env: "GROQ_API_BASE"    # https://api.groq.com/openai/v1
-```
-
-### Any OpenAI-compatible server (vLLM, LM Studio, OpenRouter, etc.)
-
-```yaml
-brain:
-  model:
-    provider: "openai_compat"
-    model_name: "your-model"
-    api_key_env: "YOUR_API_KEY"
-    api_base_env: "YOUR_BASE_URL"    # e.g. http://localhost:8000/v1
-```
-
-### AWS Bedrock
-
-```bash
-pip install -e ".[bedrock]"
-```
-
-```yaml
-brain:
-  model:
-    provider: "bedrock"
-    model_name: "anthropic.claude-sonnet-4-6-v1"
+    api_base: "https://api.groq.com/openai/v1"
 ```
 
 ---
 
-## Infrastructure
-
-HermClaw includes production-grade infrastructure:
-
-| System | Description |
-|---|---|
-| **Plugin System** | Discover, load, git install, create plugin templates |
-| **Skill Registry** | Auto-generated + user-defined skills with YAML frontmatter |
-| **Audit Logging** | SQLite-backed audit trail of every tool call |
-| **Rate Limiting** | Per-tool rate limits (configurable) |
-| **Response Cache** | LRU cache with TTL for repeated queries |
-| **Context Compression** | Auto-summarizes long conversations to stay within model limits |
-| **Parallel Execution** | Concurrent tool dispatch when multiple tools needed |
-| **Mixture-of-Agents (MoA)** | Query multiple models and merge responses |
-| **Multi-Agent Delegation** | Spawn sub-agents for parallel workstreams |
-| **Smart Tool Selection** | Only sends relevant tools to the model based on query keywords |
-| **i18n** | 16 languages (en, es, de, fr, ja, ko, zh, pt, ru, hi, tr, it, uk, af, ga, hu) |
-| **Model Catalog** | 16+ pre-configured models across 7 providers |
-| **Security Scanner** | Code pattern analysis + dependency audit |
-| **Verification Engine** | Automated testing with pass/fail assertion |
-
----
-
-## Messaging Channels
-
-HermClaw can run as a bot on multiple platforms simultaneously:
-
-| Channel | Extra | How to enable |
-|---|---|---|
-| **Telegram** | `pip install -e ".[telegram]"` | Set `TELEGRAM_BOT_TOKEN` |
-| **Discord** | `pip install -e ".[discord]"` | Set `DISCORD_BOT_TOKEN` |
-| **Slack** | `pip install -e ".[slack]"` | Set `SLACK_BOT_TOKEN` + `SLACK_APP_TOKEN` |
-| **HTTP API** | Built-in | `hermclaw serve` (runs on port 8080) |
-
----
-
-## Project Structure
+## Project Architecture
 
 ```
 hermclaw/
 ├── hermclaw/
-│   ├── brain/                  # Agent intelligence
-│   │   ├── agent_loop.py       # ReAct-style tool-calling loop
-│   │   ├── agent_core.py       # Core agent abstractions
-│   │   ├── memory/             # SQLite store, vector memory, compressor
-│   │   ├── cache.py            # Response cache (LRU + TTL)
-│   │   ├── learning_graph.py   # Concept relationship graph
-│   │   ├── skill_growth.py     # Auto-skill generation + evolution
-│   │   ├── reflection.py       # Self-learning reflection loop
-│   │   ├── model_catalog.py    # 16+ model definitions
-│   │   ├── model_manager.py    # Dynamic model switching
-│   │   ├── moa.py              # Mixture-of-Agents
-│   │   ├── multi_agent.py      # Multi-agent delegation
-│   │   ├── parallel_exec.py    # Concurrent tool execution
-│   │   ├── verification.py     # Automated testing
-│   │   ├── post_processing.py  # Response formatting
-│   │   ├── profiles.py         # User profiles + identity files
-│   │   └── transports/         # Provider adapters
-│   │       ├── openai_compat.py  # Ollama, OpenAI, Groq, OpenRouter
-│   │       ├── anthropic.py      # Claude
-│   │       ├── gemini.py         # Google Gemini (native)
-│   │       └── bedrock.py        # AWS Bedrock
-│   ├── body/                   # Gateway, channels, scheduler
-│   ├── tools/                  # All 40+ tools
-│   ├── plugins/                # Plugin system
-│   ├── security/               # Audit logging, rate limiting, secrets
-│   ├── skills/                 # Skill registry + loader
-│   ├── cli.py                  # CLI entry point (10 commands)
-│   ├── runtime.py              # Agent runtime builder
-│   ├── config.py               # Configuration system (Pydantic)
-│   ├── i18n.py                 # 16-language translations
-│   └── banner.py               # ASCII art branding
-├── tests/
-├── docs/
-├── install.py                  # Interactive setup wizard
-├── hermclaw.example.yaml       # Reference configuration
-├── pyproject.toml
-├── requirements.txt
+│   ├── brain/                        # Agent Cognitive Engine
+│   │   ├── agent_loop.py             # ReAct tool-calling loop
+│   │   ├── agent_core.py             # Agent abstractions & state
+│   │   ├── memory/                   # SQLite memory, vector store, compressor
+│   │   ├── learning_graph.py         # SQLite concept relationship graph
+│   │   ├── skill_growth.py           # Auto-skill generator & evolution
+│   │   ├── reflection.py             # Self-learning reflection loop
+│   │   ├── swarm.py                  # Multi-agent swarm orchestrator
+│   │   ├── transports/               # Ollama, Anthropic, Gemini, OpenAI, Bedrock
+│   │   └── ...
+│   ├── body/                         # Gateway, Channels & Protocols
+│   │   ├── gateway.py                # Multi-channel unified router
+│   │   ├── channels/                 # 14 platform adapters (Discord, Telegram, Slack, Matrix, etc.)
+│   │   ├── scheduler.py              # Cron & interval scheduler
+│   │   └── voice_mode.py             # Hands-free microphone voice assistant
+│   ├── tools/                        # 51+ Built-in Tools
+│   │   ├── file_tools.py             # File I/O, search, and editing
+│   │   ├── lsp_tool.py               # Language Server Protocol client
+│   │   ├── computer_tool.py          # Mouse, keyboard, and screen automation
+│   │   ├── protocol_tools.py         # Hue, Sonos, Bluetooth, Home Assistant
+│   │   ├── web_tools.py              # Firecrawl, Readability, DuckDuckGo, Playwright
+│   │   ├── media_extra.py            # AI music & audio generation
+│   │   ├── memory_extra.py           # Obsidian vault & executive briefing
+│   │   └── ...
+│   ├── security/                     # Audit logging, risk policy, secret management
+│   ├── skills/                       # User & auto-evolved skill definitions
+│   ├── cli.py                        # Terminal CLI entry point (12 subcommands)
+│   ├── runtime.py                    # Runtime builder & dependency injection
+│   └── config.py                     # Pydantic configuration schemas
+├── tests/                            # Comprehensive unit & integration tests
+├── install.py                        # 8-step interactive installer
+├── hermclaw.example.yaml             # Master configuration template
 └── README.md
 ```
 
 ---
 
-## Development
+## Development & Testing
+
+Run the full test suite across all tools, channels, and cognitive components:
 
 ```bash
 pip install -e ".[dev]"
@@ -538,4 +519,4 @@ pytest
 
 ## License
 
-MIT
+MIT © HermClaw Contributors
