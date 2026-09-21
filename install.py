@@ -23,14 +23,27 @@ This interactive wizard asks everything needed to configure Hermclaw:
 from __future__ import annotations
 
 import getpass
+import json
 import os
 import platform
 import shutil
 import subprocess
 import sys
 import time
+import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+if sys.platform == "win32":
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        if hasattr(sys.stdin, "reconfigure"):
+            sys.stdin.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 # ─── ANSI Colors ──────────────────────────────────────────────────────────────
 
@@ -140,34 +153,39 @@ def check_python():
         print(f"\n  {C.RED}✗ Python 3.11+ required, found {v.major}.{v.minor}.{v.micro}{C.RESET}")
         print(f"  {C.DIM}Install Python 3.11+ from https://python.org/downloads{C.RESET}")
         sys.exit(1)
-    print(f"  {C.GREEN}✓{C.RESET} Python {v.major}.{v.minor}.{v.micro}")
+    print(f"  {C.GREEN}✓{C.RESET} Python {v.major}.{v.minor}.{v.micro}", flush=True)
 
 
 def check_ollama() -> bool:
-    """Check if Ollama is installed and running."""
-    if not shutil.which("ollama"):
-        return False
-    try:
-        res = subprocess.run(["ollama", "list"], capture_output=True, text=True, timeout=5)
-        return res.returncode == 0
-    except Exception:
-        return False
+    """Check if Ollama is installed and actively listening via HTTP."""
+    for host in ("127.0.0.1", "localhost"):
+        try:
+            req = urllib.request.Request(
+                f"http://{host}:11434/api/tags",
+                headers={"User-Agent": "hermclaw-installer"},
+            )
+            with urllib.request.urlopen(req, timeout=1.0) as resp:
+                if resp.status == 200:
+                    return True
+        except Exception:
+            continue
+    return False
 
 
 def get_ollama_models() -> List[str]:
-    """Get list of locally pulled Ollama models."""
-    try:
-        res = subprocess.run(["ollama", "list"], capture_output=True, text=True, timeout=5)
-        if res.returncode == 0:
-            lines = res.stdout.strip().split("\n")
-            models = []
-            for line in lines[1:]:
-                parts = line.split()
-                if parts:
-                    models.append(parts[0])
-            return models
-    except Exception:
-        pass
+    """Get list of locally pulled Ollama models via HTTP REST API."""
+    for host in ("127.0.0.1", "localhost"):
+        try:
+            req = urllib.request.Request(
+                f"http://{host}:11434/api/tags",
+                headers={"User-Agent": "hermclaw-installer"},
+            )
+            with urllib.request.urlopen(req, timeout=1.5) as resp:
+                if resp.status == 200:
+                    data = json.loads(resp.read().decode("utf-8", errors="replace"))
+                    return [m["name"] for m in data.get("models", []) if "name" in m]
+        except Exception:
+            continue
     return []
 
 
@@ -833,13 +851,13 @@ def install(settings: dict):
 
 def main():
     banner()
-    print(f"  {C.BOLD}Pre-flight diagnostic:{C.RESET}")
+    print(f"  {C.BOLD}Pre-flight diagnostic:{C.RESET}", flush=True)
     check_python()
 
     if check_ollama():
-        print(f"  {C.GREEN}✓{C.RESET} Ollama service active")
+        print(f"  {C.GREEN}✓{C.RESET} Ollama service active", flush=True)
     else:
-        print(f"  {C.YELLOW}!{C.RESET} Ollama not active (cloud providers ready)")
+        print(f"  {C.YELLOW}!{C.RESET} Ollama not active (cloud providers ready)", flush=True)
 
     settings = setup_wizard()
 
