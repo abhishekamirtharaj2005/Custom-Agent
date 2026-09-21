@@ -35,11 +35,14 @@ from hermclaw.security.secrets import redact, resolve_env_ref
 
 logger = structlog.get_logger(__name__)
 
-CHANNEL_NAMES = ("cli", "web", "telegram", "discord", "slack", "whatsapp")
+CHANNEL_NAMES = (
+    "cli", "web", "telegram", "discord", "slack", "whatsapp",
+    "teams", "signal", "matrix", "google_chat", "feishu", "mattermost", "twilio", "webhook",
+)
 
 
 def _enabled_channel_names(channels_config: Any) -> set[str]:
-    return {name for name in CHANNEL_NAMES if getattr(channels_config, name).enabled}
+    return {name for name in CHANNEL_NAMES if hasattr(channels_config, name) and getattr(channels_config, name).enabled}
 
 
 def _channel_config_for(channels_config: Any, name: str) -> Any:

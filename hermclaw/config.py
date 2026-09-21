@@ -115,6 +115,61 @@ class WhatsappChannelConfig(BaseModel):
     sidecar_command: Optional[str] = None
 
 
+class TeamsChannelConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = False
+    webhook_url_env: str = "TEAMS_WEBHOOK_URL"
+
+
+class SignalChannelConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = False
+    api_url_env: str = "SIGNAL_API_URL"
+    number_env: str = "SIGNAL_NUMBER"
+
+
+class MatrixChannelConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = False
+    homeserver_env: str = "MATRIX_HOMESERVER"
+    access_token_env: str = "MATRIX_ACCESS_TOKEN"
+    room_id_env: str = "MATRIX_ROOM_ID"
+
+
+class GoogleChatChannelConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = False
+    webhook_url_env: str = "GOOGLE_CHAT_WEBHOOK"
+
+
+class FeishuChannelConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = False
+    webhook_url_env: str = "FEISHU_WEBHOOK"
+
+
+class MattermostChannelConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = False
+    server_url_env: str = "MATTERMOST_URL"
+    token_env: str = "MATTERMOST_TOKEN"
+
+
+class TwilioChannelConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = False
+    account_sid_env: str = "TWILIO_ACCOUNT_SID"
+    auth_token_env: str = "TWILIO_AUTH_TOKEN"
+    from_number_env: str = "TWILIO_FROM_NUMBER"
+
+
+class WebhookChannelConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = False
+    webhook_url_env: str = "WEBHOOK_URL"
+    secret_env: str = "WEBHOOK_SECRET"
+
+
 class ChannelsConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     telegram: TelegramChannelConfig = Field(default_factory=TelegramChannelConfig)
@@ -123,6 +178,14 @@ class ChannelsConfig(BaseModel):
     cli: CliChannelConfig = Field(default_factory=CliChannelConfig)
     web: WebChannelConfig = Field(default_factory=WebChannelConfig)
     whatsapp: WhatsappChannelConfig = Field(default_factory=WhatsappChannelConfig)
+    teams: TeamsChannelConfig = Field(default_factory=TeamsChannelConfig)
+    signal: SignalChannelConfig = Field(default_factory=SignalChannelConfig)
+    matrix: MatrixChannelConfig = Field(default_factory=MatrixChannelConfig)
+    google_chat: GoogleChatChannelConfig = Field(default_factory=GoogleChatChannelConfig)
+    feishu: FeishuChannelConfig = Field(default_factory=FeishuChannelConfig)
+    mattermost: MattermostChannelConfig = Field(default_factory=MattermostChannelConfig)
+    twilio: TwilioChannelConfig = Field(default_factory=TwilioChannelConfig)
+    webhook: WebhookChannelConfig = Field(default_factory=WebhookChannelConfig)
 
 
 class HeartbeatConfig(BaseModel):
