@@ -46,6 +46,7 @@ class ChatCompletionsTransport(ProviderTransport):
         self.api_base = api_base.rstrip("/")
         self.max_tokens = max_tokens
         self.max_retries = max_retries
+        self.timeout_s = timeout_s
         headers = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
@@ -261,9 +262,15 @@ class ChatCompletionsTransport(ProviderTransport):
                         raise TransportError(f"HTTP {resp.status_code} from {url}: {resp.text[:300]}")
                     else:
                         return self._parse_response(resp.json())
+            except httpx.TimeoutException as exc:
+                last_exc = exc
+                if attempt >= self.max_retries:
+                    raise TransportError(
+                        f"Request to {url} timed out after {round(self.timeout_s)}s. The model '{self.model_name}' on {self.api_base} may be experiencing extreme server load, queueing delays, or cold-start latency. Please try another model or retry."
+                    ) from exc
             except httpx.TransportError as exc:
                 last_exc = exc
-                if attempt == self.max_retries:
+                if attempt >= self.max_retries:
                     raise TransportError(f"Connection error to {url}: {exc}") from exc
             backoff = min(2**attempt, 20) + random.uniform(0, 0.5)
             logger.warning("transport.retrying", provider="openai_compat", attempt=attempt, backoff_s=round(backoff, 2))
