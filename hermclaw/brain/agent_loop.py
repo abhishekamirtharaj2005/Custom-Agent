@@ -766,10 +766,12 @@ class HermclawAgent:
                         final_stop = "timeout_after_tools"
                         await self.memory_store.a_add_message(session_id, "assistant", final_text)
                         return AgentTurnResult(
-                            response=AgentResponse(text=final_text, tool_calls=[], stop_reason=final_stop, usage=total_usage),
-                            used_model_config=self.model_config,
-                            tool_records=tool_records,
                             session_id=session_id,
+                            text=final_text,
+                            tool_calls_made=tool_records,
+                            stop_reason=final_stop,
+                            usage=total_usage,
+                            compressed=compressed,
                         )
                     raise
                 total_usage = add_usage(total_usage, resp_candidate.usage)

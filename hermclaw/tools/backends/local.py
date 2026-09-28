@@ -28,13 +28,28 @@ async def run_local_command(
     scoped environment (never the full parent environment by default --
     see security/secrets.py)."""
     try:
-        proc = await asyncio.create_subprocess_shell(
-            command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            cwd=cwd,
-            env=env if env is not None else {},
-        )
+        if os.name == "nt":
+            proc = await asyncio.create_subprocess_exec(
+                "powershell.exe",
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=cwd,
+                env=env if env is not None else {},
+            )
+        else:
+            proc = await asyncio.create_subprocess_shell(
+                command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=cwd,
+                env=env if env is not None else {},
+            )
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
         except asyncio.TimeoutError:
@@ -59,7 +74,13 @@ def scoped_env(extra_allowed: Optional[list[str]] = None) -> dict[str, str]:
     """Build a minimal environment for subprocess execution: PATH/HOME/LANG
     only by default, plus any explicitly allow-listed variables for this
     specific tool call. Never forwards the full parent environment."""
-    base_keys = ["PATH", "HOME", "LANG", "LC_ALL"]
+    base_keys = [
+        "PATH", "HOME", "LANG", "LC_ALL",
+        # Essential Windows system environment variables
+        "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "SYSTEMROOT", "COMSPEC",
+        "TEMP", "TMP", "APPDATA", "LOCALAPPDATA", "PATHEXT", "OS",
+        "PROCESSOR_ARCHITECTURE", "PUBLIC",
+    ]
     env = {k: os.environ[k] for k in base_keys if k in os.environ}
     if extra_allowed:
         for k in extra_allowed:
