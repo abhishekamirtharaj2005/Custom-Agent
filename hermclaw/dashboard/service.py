@@ -745,6 +745,46 @@ class DashboardService:
                     description=f"{model_name} (OpenAI Cloud)",
                     api_base="https://api.openai.com/v1",
                 )
+        elif prov_norm == "nvidia":
+            if not info or "nvidia.com" not in (getattr(info, "api_base", "") or ""):
+                info = ModelInfo(
+                    name=model_name,
+                    provider="openai_compat",
+                    context_window=131_072,
+                    max_output_tokens=8192,
+                    description=f"{model_name} (NVIDIA NIM Cloud)",
+                    api_base="https://integrate.api.nvidia.com/v1",
+                )
+        elif prov_norm == "groq":
+            if not info or "groq.com" not in (getattr(info, "api_base", "") or ""):
+                info = ModelInfo(
+                    name=model_name,
+                    provider="openai_compat",
+                    context_window=128_000,
+                    max_output_tokens=8192,
+                    description=f"{model_name} (Groq Cloud)",
+                    api_base="https://api.groq.com/openai/v1",
+                )
+        elif prov_norm == "deepseek":
+            if not info or "deepseek.com" not in (getattr(info, "api_base", "") or ""):
+                info = ModelInfo(
+                    name=model_name,
+                    provider="openai_compat",
+                    context_window=64_000,
+                    max_output_tokens=8192,
+                    description=f"{model_name} (DeepSeek Cloud)",
+                    api_base="https://api.deepseek.com/v1",
+                )
+        elif prov_norm == "openrouter":
+            if not info or "openrouter.ai" not in (getattr(info, "api_base", "") or ""):
+                info = ModelInfo(
+                    name=model_name,
+                    provider="openai_compat",
+                    context_window=128_000,
+                    max_output_tokens=16_384,
+                    description=f"{model_name} (OpenRouter Cloud)",
+                    api_base="https://openrouter.ai/api/v1",
+                )
         elif not info:
             is_local = (prov_norm == "ollama") or (":" in model_name) or ("localhost" in getattr(info, "api_base", ""))
             info = ModelInfo(
@@ -771,35 +811,7 @@ class DashboardService:
             if not os.environ.get("GEMINI_API_KEY"):
                 os.environ["GEMINI_API_KEY"] = g_key
         else:  # openai_compat
-            if "localhost" in (info.api_base or "") or "127.0.0.1" in (info.api_base or "") or not info.api_base:
-                api_base_env = "OLLAMA_API_BASE"
-                api_key_env = "OLLAMA_API_KEY"
-                os.environ["OLLAMA_API_BASE"] = info.api_base or "http://localhost:11434/v1"
-            elif "openai.com" in info.api_base:
-                api_base_env = "OPENAI_API_BASE"
-                api_key_env = "OPENAI_API_KEY"
-                if not os.environ.get("OPENAI_API_KEY"):
-                    raise ValueError("OpenAI API key is not configured. Please save it in Doctor & Settings -> AI Engine Config.")
-                os.environ["OPENAI_API_BASE"] = info.api_base
-            elif "groq.com" in info.api_base:
-                api_base_env = "GROQ_API_BASE"
-                api_key_env = "GROQ_API_KEY"
-                if not os.environ.get("GROQ_API_KEY"):
-                    raise ValueError("Groq API key is not configured. Please save it in Doctor & Settings -> AI Engine Config.")
-                os.environ["GROQ_API_BASE"] = info.api_base
-            elif "deepseek.com" in info.api_base:
-                api_base_env = "DEEPSEEK_API_BASE"
-                api_key_env = "DEEPSEEK_API_KEY"
-                if not os.environ.get("DEEPSEEK_API_KEY"):
-                    raise ValueError("DeepSeek API key is not configured. Please save it in Doctor & Settings -> AI Engine Config.")
-                os.environ["DEEPSEEK_API_BASE"] = info.api_base
-            elif "openrouter.ai" in info.api_base:
-                api_base_env = "OPENROUTER_API_BASE"
-                api_key_env = "OPENROUTER_API_KEY"
-                if not os.environ.get("OPENROUTER_API_KEY"):
-                    raise ValueError("OpenRouter API key is not configured. Please save it in Doctor & Settings -> AI Engine Config.")
-                os.environ["OPENROUTER_API_BASE"] = info.api_base
-            elif "nvidia.com" in (info.api_base or "") or prov_norm == "nvidia":
+            if prov_norm == "nvidia" or "nvidia.com" in (info.api_base or ""):
                 api_base_env = "NVIDIA_API_BASE"
                 api_key_env = "NVIDIA_API_KEY"
                 nv_key = os.environ.get("NVIDIA_API_KEY") or os.environ.get("NVAPI_KEY")
@@ -808,6 +820,34 @@ class DashboardService:
                 if not os.environ.get("NVIDIA_API_KEY"):
                     os.environ["NVIDIA_API_KEY"] = nv_key
                 os.environ["NVIDIA_API_BASE"] = info.api_base or "https://integrate.api.nvidia.com/v1"
+            elif prov_norm == "groq" or "groq.com" in (info.api_base or ""):
+                api_base_env = "GROQ_API_BASE"
+                api_key_env = "GROQ_API_KEY"
+                if not os.environ.get("GROQ_API_KEY"):
+                    raise ValueError("Groq API key is not configured. Please save it in Doctor & Settings -> AI Engine Config.")
+                os.environ["GROQ_API_BASE"] = info.api_base or "https://api.groq.com/openai/v1"
+            elif prov_norm == "deepseek" or "deepseek.com" in (info.api_base or ""):
+                api_base_env = "DEEPSEEK_API_BASE"
+                api_key_env = "DEEPSEEK_API_KEY"
+                if not os.environ.get("DEEPSEEK_API_KEY"):
+                    raise ValueError("DeepSeek API key is not configured. Please save it in Doctor & Settings -> AI Engine Config.")
+                os.environ["DEEPSEEK_API_BASE"] = info.api_base or "https://api.deepseek.com/v1"
+            elif prov_norm == "openrouter" or "openrouter.ai" in (info.api_base or ""):
+                api_base_env = "OPENROUTER_API_BASE"
+                api_key_env = "OPENROUTER_API_KEY"
+                if not os.environ.get("OPENROUTER_API_KEY"):
+                    raise ValueError("OpenRouter API key is not configured. Please save it in Doctor & Settings -> AI Engine Config.")
+                os.environ["OPENROUTER_API_BASE"] = info.api_base or "https://openrouter.ai/api/v1"
+            elif "localhost" in (info.api_base or "") or "127.0.0.1" in (info.api_base or "") or not info.api_base or prov_norm == "ollama":
+                api_base_env = "OLLAMA_API_BASE"
+                api_key_env = "OLLAMA_API_KEY"
+                os.environ["OLLAMA_API_BASE"] = info.api_base or "http://localhost:11434/v1"
+            elif "openai.com" in (info.api_base or "") or prov_norm in ("openai", "openai_compat"):
+                api_base_env = "OPENAI_API_BASE"
+                api_key_env = "OPENAI_API_KEY"
+                if not os.environ.get("OPENAI_API_KEY"):
+                    raise ValueError("OpenAI API key is not configured. Please save it in Doctor & Settings -> AI Engine Config.")
+                os.environ["OPENAI_API_BASE"] = info.api_base
             else:
                 api_base_env = f"HERMCLAW_API_BASE_{info.provider.upper()}"
                 api_key_env = "OPENAI_API_KEY"
@@ -1001,10 +1041,16 @@ class DashboardService:
                 conn.close()
         return sid
 
-    async def send_message(self, session_id: str, message: str, model: Optional[str] = None) -> dict[str, Any]:
+    async def send_message(
+        self,
+        session_id: str,
+        message: str,
+        model: Optional[str] = None,
+        provider: Optional[str] = None,
+    ) -> dict[str, Any]:
         """Run an agent turn on a session and capture response and tool calls."""
         if model and model.strip():
-            await self.switch_model(model.strip())
+            await self.switch_model(model.strip(), provider=provider)
         runtime = await self.get_runtime()
 
         start_time = time.time()

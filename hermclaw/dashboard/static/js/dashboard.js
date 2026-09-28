@@ -425,7 +425,10 @@ function setupChatHandlers() {
     pill.classList.remove('hidden');
 
     try {
-      const selectedModel = document.getElementById('chat-model-select')?.value;
+      const modelSelectEl = document.getElementById('chat-model-select');
+      const selectedOpt = modelSelectEl?.selectedOptions ? modelSelectEl.selectedOptions[0] : null;
+      const selectedModel = selectedOpt?.value || modelSelectEl?.value;
+      const selectedProvider = selectedOpt?.dataset?.provider;
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -433,6 +436,7 @@ function setupChatHandlers() {
           session_id: state.activeSessionId,
           message: text,
           model: selectedModel || undefined,
+          provider: selectedProvider || undefined,
         }),
       });
       const data = await res.json();
@@ -548,11 +552,17 @@ function setupChatHandlers() {
   modelSelect?.addEventListener('change', async () => {
     const newModel = modelSelect.value;
     if (!newModel) return;
-    let provider = undefined;
-    const low = newModel.toLowerCase();
-    if (low.startsWith('gemini')) provider = 'gemini';
-    else if (low.startsWith('claude')) provider = 'anthropic';
-    else if (low.startsWith('gpt-') || low.startsWith('o1') || low.startsWith('o3')) provider = 'openai';
+    const selectedOpt = modelSelect.selectedOptions ? modelSelect.selectedOptions[0] : null;
+    let provider = selectedOpt?.dataset?.provider;
+    if (!provider) {
+      const low = newModel.toLowerCase();
+      if (low.startsWith('gemini')) provider = 'gemini';
+      else if (low.startsWith('claude')) provider = 'anthropic';
+      else if (low.startsWith('gpt-') || low.startsWith('o1') || low.startsWith('o3')) provider = 'openai';
+      else if (low.startsWith('openrouter/')) provider = 'openrouter';
+      else if (low.startsWith('deepseek')) provider = 'deepseek';
+      else if (low.startsWith('nvidia/') || low.startsWith('meta/llama-') || low.includes('nemotron')) provider = 'nvidia';
+    }
 
     try {
       const res = await fetch('/api/chat/switch-model', {
@@ -1760,7 +1770,7 @@ async function loadSavedModels() {
         : '';
 
       const activateBtn = !m.is_active
-        ? `<button type="button" class="btn btn-xs btn-primary" onclick="activateSavedModel('${escapeHtml(m.id)}')">⚡ Use Now</button>`
+        ? `<button type="button" class="btn btn-xs btn-primary" onclick="activateSavedModel('${escapeHtml(m.id)}', '${escapeHtml(m.provider)}')">⚡ Use Now</button>`
         : `<button type="button" class="btn btn-xs btn-ghost" disabled>In Use</button>`;
 
       return `
@@ -1813,12 +1823,12 @@ function editSavedModel(provider, modelName) {
   showToast(`Loaded ${modelName} into AI Engine Config editor.`, 'info');
 }
 
-async function activateSavedModel(modelName) {
+async function activateSavedModel(modelName, provider) {
   try {
     const res = await fetch('/api/chat/switch-model', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: modelName }),
+      body: JSON.stringify({ model: modelName, provider: provider || undefined }),
     });
     const data = await res.json();
     if (res.ok) {
@@ -1949,7 +1959,7 @@ function populateModelDropdown(models, currentModel) {
   if (localModels.length > 0) {
     html += '<optgroup label="Local Models (Ollama)">';
     localModels.forEach(m => {
-      html += `<option value="${escapeHtml(m.id)}" ${m.id === currentVal ? 'selected' : ''}>${escapeHtml(m.label)}</option>`;
+      html += `<option value="${escapeHtml(m.id)}" data-provider="ollama" ${m.id === currentVal ? 'selected' : ''}>${escapeHtml(m.label)}</option>`;
     });
     html += '</optgroup>';
   }
@@ -1968,7 +1978,7 @@ function populateModelDropdown(models, currentModel) {
     const groupLabel = providerDisplayNames[p] || `Cloud Models (${p.toUpperCase()})`;
     html += `<optgroup label="${escapeHtml(groupLabel)}">`;
     cloudByProvider[p].forEach(m => {
-      html += `<option value="${escapeHtml(m.id)}" ${m.id === currentVal ? 'selected' : ''}>${escapeHtml(m.label)}</option>`;
+      html += `<option value="${escapeHtml(m.id)}" data-provider="${escapeHtml(p)}" ${m.id === currentVal ? 'selected' : ''}>${escapeHtml(m.label)}</option>`;
     });
     html += '</optgroup>';
   });

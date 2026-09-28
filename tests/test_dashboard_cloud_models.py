@@ -407,4 +407,62 @@ async def test_nvidia_nim_support(tmp_path: Path, monkeypatch):
     assert runtime.agent.transport.api_base == "https://integrate.api.nvidia.com/v1"
 
 
+@pytest.mark.live
+@pytest.mark.asyncio
+async def test_custom_saved_nvidia_model_and_chat_request(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr("hermclaw.config.hermclaw_home", lambda: tmp_path)
+    monkeypatch.setattr("hermclaw.dashboard.service.hermclaw_home", lambda: tmp_path)
+    
+    # Ensure OPENAI_API_KEY is unset, but NVIDIA_API_KEY is set
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test1234567890abcdef")
+
+    # Write custom saved model to saved_models.json
+    import json
+    saved_models_file = tmp_path / "saved_models.json"
+    saved_models_file.write_text(json.dumps([
+        {
+            "id": "z-ai/glm-5.3",
+            "name": "z-ai/glm-5.3",
+            "provider": "nvidia",
+            "type": "cloud",
+            "custom": True,
+        }
+    ]), encoding="utf-8")
+
+    svc = DashboardService()
+    # Switch using model name only (no provider passed explicitly) - should deduce from saved_models.json
+    res = await svc.switch_model("z-ai/glm-5.3")
+    assert res["success"] is True
+    assert res["provider"] == "nvidia"
+    assert res["model_name"] == "z-ai/glm-5.3"
+    assert os.environ.get("NVIDIA_API_BASE") == "https://integrate.api.nvidia.com/v1"
+
+    # Also test creating app and sending ChatRequest with model and provider
+    app = create_dashboard_app(service=svc)
+    client = TestClient(app)
+    
+    # Mock send_message on svc to verify arguments
+    sent_args = {}
+    async def mock_send_message(session_id: str, message: str, model=None, provider=None):
+        sent_args["session_id"] = session_id
+        sent_args["message"] = message
+        sent_args["model"] = model
+        sent_args["provider"] = provider
+        return {"response": "mock response", "tools_executed": []}
+
+    monkeypatch.setattr(svc, "send_message", mock_send_message)
+
+    resp = client.post("/api/chat", json={
+        "session_id": "test-session-123",
+        "message": "hello",
+        "model": "z-ai/glm-5.3",
+        "provider": "nvidia",
+    })
+    assert resp.status_code == 200
+    assert sent_args["model"] == "z-ai/glm-5.3"
+    assert sent_args["provider"] == "nvidia"
+
+
+
 

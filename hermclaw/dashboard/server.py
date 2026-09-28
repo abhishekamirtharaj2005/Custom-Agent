@@ -22,6 +22,7 @@ class ChatRequest(BaseModel):
     session_id: str
     message: str
     model: Optional[str] = None
+    provider: Optional[str] = None
 
 
 class SwitchModelRequest(BaseModel):
@@ -258,7 +259,9 @@ def create_dashboard_app(
     @app.post("/api/chat")
     async def post_chat(req: ChatRequest) -> dict[str, Any]:
         try:
-            return await svc.send_message(req.session_id, req.message, model=req.model)
+            return await svc.send_message(
+                req.session_id, req.message, model=req.model, provider=req.provider
+            )
         except Exception as exc:
             raise HTTPException(status_code=400, detail=str(exc))
 

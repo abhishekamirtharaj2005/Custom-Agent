@@ -404,6 +404,70 @@ class ModelCatalog:
                 description=f"{name_or_alias.strip()} (NVIDIA NIM Cloud)",
             )
 
+        # Dynamic lookup in ~/.hermclaw/saved_models.json for user-configured custom models
+        try:
+            from hermclaw.config import hermclaw_home
+            import json
+            saved_file = hermclaw_home() / "saved_models.json"
+            if saved_file.exists():
+                for sm in json.loads(saved_file.read_text(encoding="utf-8")):
+                    if sm.get("id", "").strip().lower() == key:
+                        p = sm.get("provider", "").lower()
+                        if p == "nvidia":
+                            return ModelInfo(
+                                name=name_or_alias.strip(),
+                                provider="openai_compat",
+                                api_base="https://integrate.api.nvidia.com/v1",
+                                context_window=131_072,
+                                max_output_tokens=8192,
+                                description=f"{name_or_alias.strip()} (NVIDIA NIM Cloud)",
+                            )
+                        elif p == "groq":
+                            return ModelInfo(
+                                name=name_or_alias.strip(),
+                                provider="openai_compat",
+                                api_base="https://api.groq.com/openai/v1",
+                                context_window=128_000,
+                                max_output_tokens=8192,
+                                description=f"{name_or_alias.strip()} (Groq Cloud)",
+                            )
+                        elif p == "deepseek":
+                            return ModelInfo(
+                                name=name_or_alias.strip(),
+                                provider="openai_compat",
+                                api_base="https://api.deepseek.com/v1",
+                                context_window=64_000,
+                                max_output_tokens=8192,
+                                description=f"{name_or_alias.strip()} (DeepSeek Cloud)",
+                            )
+                        elif p == "openrouter":
+                            return ModelInfo(
+                                name=name_or_alias.strip(),
+                                provider="openai_compat",
+                                api_base="https://openrouter.ai/api/v1",
+                                context_window=128_000,
+                                max_output_tokens=16_384,
+                                description=f"{name_or_alias.strip()} (OpenRouter Cloud)",
+                            )
+                        elif p == "gemini":
+                            return ModelInfo(
+                                name=name_or_alias.strip(),
+                                provider="gemini",
+                                context_window=1_000_000,
+                                max_output_tokens=65_536,
+                                description=f"{name_or_alias.strip()} (Google Gemini Cloud)",
+                            )
+                        elif p == "anthropic":
+                            return ModelInfo(
+                                name=name_or_alias.strip(),
+                                provider="anthropic",
+                                context_window=200_000,
+                                max_output_tokens=16_384,
+                                description=f"{name_or_alias.strip()} (Anthropic Claude Cloud)",
+                            )
+        except Exception:
+            pass
+
         return None
 
     def list_all(self) -> list[ModelInfo]:
