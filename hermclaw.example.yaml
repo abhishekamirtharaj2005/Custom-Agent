@@ -60,6 +60,12 @@ brain:
                                       #   model_name: "llama-3.1-70b"
                                       #   api_key_env: "OPENAI_COMPAT_API_KEY"
                                       #   api_base_env: "OPENAI_COMPAT_API_BASE"
+                                      #
+                                      # NVIDIA NIM (Llama 3.3 70B, Nemotron, DeepSeek-R1)
+                                      # provider: "openai_compat"
+                                      # model_name: "meta/llama-3.3-70b-instruct"
+                                      # api_key_env: "NVIDIA_API_KEY"
+                                      # api_base_env: "NVIDIA_API_BASE"  # https://integrate.api.nvidia.com/v1
   memory:
     compression_threshold: 0.5       # fraction of context window that triggers compression
     keep_recent_exchanges: 2

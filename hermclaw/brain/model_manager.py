@@ -69,6 +69,12 @@ _MODEL_COSTS: dict[str, tuple[float, float]] = {
     "mixtral-8x7b": (0.24, 0.24),
     "llama-3.1-70b": (0.00, 0.00),  # Local/free
     "gemma4:26b": (0.00, 0.00),  # Local/free
+    # NVIDIA NIM models
+    "meta/llama-3.3-70b-instruct": (0.70, 0.90),
+    "meta/llama-3.1-405b-instruct": (2.00, 2.00),
+    "nvidia/llama-3.1-nemotron-70b-instruct": (0.70, 0.90),
+    "deepseek-ai/deepseek-r1": (0.55, 2.19),
+    "deepseek-ai/deepseek-v3": (0.14, 0.28),
 }
 
 

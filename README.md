@@ -35,7 +35,7 @@ HermClaw merges the autonomous ReAct cognitive loop of **Hermes ☤** with the r
 - 🗣️ **Jarvis Voice Assistant** — hands-free conversational voice mode with live microphone listening, wake-word sensitivity, voice cloning, and spoken responses.
 - 🐝 **Multi-Agent Swarms** — coordinated sub-agent teams (Planner, Researcher, Coder, Reviewer, Synthesizer) tackling complex, multi-stage goals.
 - 💬 **14+ Messaging Channels** — seamlessly operate across Telegram, Discord, Slack, WhatsApp, Signal, Matrix, Teams, Google Chat, Feishu/Lark, Mattermost, SMS, and Webhooks simultaneously.
-- 🏠 **Local-First & Multi-Provider** — runs 100% locally and free with Ollama, or connects to Claude, GPT-4o, Gemini 2.5, Groq, OpenRouter, and AWS Bedrock.
+- 🏠 **Local-First & Multi-Provider** — runs 100% locally and free with Ollama, or connects to NVIDIA NIM, Claude, GPT-4o, Gemini 2.5, Groq, OpenRouter, and AWS Bedrock.
 
 ---
 
@@ -460,6 +460,20 @@ brain:
     provider: "openai_compat"
     model_name: "llama-3.3-70b-versatile"
     api_base: "https://api.groq.com/openai/v1"
+```
+
+### NVIDIA NIM (Llama 3.3 70B, Llama 3.1 405B, DeepSeek-R1, Nemotron, Mistral)
+```bash
+export NVIDIA_API_KEY="nvapi-..."          # Linux / macOS
+$env:NVIDIA_API_KEY = "nvapi-..."           # Windows PowerShell
+```
+```yaml
+brain:
+  model:
+    provider: "openai_compat"
+    model_name: "meta/llama-3.3-70b-instruct"
+    api_key_env: "NVIDIA_API_KEY"
+    api_base_env: "NVIDIA_API_BASE"        # defaults to https://integrate.api.nvidia.com/v1
 ```
 
 ---

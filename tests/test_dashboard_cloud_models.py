@@ -362,4 +362,49 @@ def test_gemini_thought_signature_preservation_and_fallback():
     assert "Notepad opened" in contents_unsigned[2]["parts"][0]["text"]
 
 
+@pytest.mark.asyncio
+async def test_nvidia_nim_support(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr("hermclaw.dashboard.service.hermclaw_home", lambda: tmp_path)
+    
+    # 1. ModelCatalog resolves NVIDIA models
+    catalog = ModelCatalog()
+    info = catalog.resolve("meta/llama-3.3-70b-instruct")
+    assert info is not None
+    assert info.provider == "openai_compat"
+    assert info.api_base == "https://integrate.api.nvidia.com/v1"
+
+    nemotron = catalog.resolve("nvidia/llama-3.1-nemotron-70b-instruct")
+    assert nemotron is not None
+    assert "nvidia.com" in nemotron.api_base
+
+    # 2. DashboardService provider metadata
+    svc = DashboardService()
+    nv_prov = next((p for p in CLOUD_PROVIDERS if p["id"] == "nvidia"), None)
+    assert nv_prov is not None
+    assert nv_prov["env_var"] == "NVIDIA_API_KEY"
+
+    # 3. Save NVIDIA API Key
+    ok, msg = svc.save_api_keys({"NVIDIA_API_KEY": "nvapi-test1234567890abcdef"})
+    assert ok is True
+    status = svc.get_api_keys_status()
+    nv_status = next(s for s in status if s["id"] == "nvidia")
+    assert nv_status["configured"] is True
+    assert "nvap...cdef" == nv_status["preview"]
+
+    # 4. Switch model to NVIDIA NIM model
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test1234567890abcdef")
+    res_switch = await svc.switch_model("meta/llama-3.3-70b-instruct", provider="nvidia")
+    assert res_switch["success"] is True
+    assert res_switch["model_name"] == "meta/llama-3.3-70b-instruct"
+    assert res_switch["provider"] == "nvidia"
+    assert svc._current_model == "meta/llama-3.3-70b-instruct"
+    assert os.environ.get("NVIDIA_API_BASE") == "https://integrate.api.nvidia.com/v1"
+
+    # Runtime transport should be ChatCompletionsTransport pointing to NVIDIA NIM
+    runtime = await svc.get_runtime()
+    from hermclaw.brain.transports.openai_compat import ChatCompletionsTransport
+    assert isinstance(runtime.agent.transport, ChatCompletionsTransport)
+    assert runtime.agent.transport.api_base == "https://integrate.api.nvidia.com/v1"
+
+
 

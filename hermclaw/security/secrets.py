@@ -33,6 +33,10 @@ def resolve_env_ref(env_var_name: Optional[str], required: bool = False) -> Opti
             raise MissingSecretError("No env var reference configured")
         return None
     value = os.environ.get(env_var_name)
+    if value is None and env_var_name == "NVIDIA_API_KEY":
+        value = os.environ.get("NVAPI_KEY")
+    elif value is None and env_var_name == "NVIDIA_API_BASE":
+        value = "https://integrate.api.nvidia.com/v1"
     if value is None and required:
         raise MissingSecretError(
             f"Environment variable '{env_var_name}' is not set. "

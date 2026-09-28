@@ -258,6 +258,57 @@ _BUILTIN_MODELS: list[ModelInfo] = [
         input_cost_per_1m=0.88, output_cost_per_1m=0.88,
         api_base="https://api.together.xyz/v1",
     ),
+
+    # --- NVIDIA NIM ---
+    ModelInfo(
+        name="meta/llama-3.3-70b-instruct", provider="openai_compat",
+        context_window=128_000, max_output_tokens=4096,
+        description="NVIDIA NIM - Meta Llama 3.3 70B Instruct",
+        aliases=["nvidia-llama3.3", "nvidia/llama-3.3-70b", "llama-3.3-70b-instruct"],
+        api_base="https://integrate.api.nvidia.com/v1",
+    ),
+    ModelInfo(
+        name="meta/llama-3.1-405b-instruct", provider="openai_compat",
+        context_window=128_000, max_output_tokens=4096,
+        description="NVIDIA NIM - Meta Llama 3.1 405B Instruct (Flagship)",
+        aliases=["nvidia-llama405b", "llama-3.1-405b", "nvidia/llama-3.1-405b"],
+        api_base="https://integrate.api.nvidia.com/v1",
+    ),
+    ModelInfo(
+        name="deepseek-ai/deepseek-r1", provider="openai_compat",
+        context_window=64_000, max_output_tokens=8192,
+        description="NVIDIA NIM - DeepSeek R1 Reasoning Model",
+        aliases=["nvidia-deepseek-r1", "nvidia/deepseek-r1", "nvidia-r1"],
+        api_base="https://integrate.api.nvidia.com/v1",
+    ),
+    ModelInfo(
+        name="deepseek-ai/deepseek-v3", provider="openai_compat",
+        context_window=64_000, max_output_tokens=8192,
+        description="NVIDIA NIM - DeepSeek V3 Chat Model",
+        aliases=["nvidia-deepseek-v3", "nvidia/deepseek-v3"],
+        api_base="https://integrate.api.nvidia.com/v1",
+    ),
+    ModelInfo(
+        name="nvidia/llama-3.1-nemotron-70b-instruct", provider="openai_compat",
+        context_window=128_000, max_output_tokens=4096,
+        description="NVIDIA Nemotron 70B Instruct (High-precision reasoning)",
+        aliases=["nemotron", "nemotron-70b", "nvidia-nemotron"],
+        api_base="https://integrate.api.nvidia.com/v1",
+    ),
+    ModelInfo(
+        name="mistralai/mistral-large-2-instruct", provider="openai_compat",
+        context_window=128_000, max_output_tokens=4096,
+        description="NVIDIA NIM - Mistral Large 2 Instruct",
+        aliases=["nvidia-mistral-large", "nvidia/mistral-large"],
+        api_base="https://integrate.api.nvidia.com/v1",
+    ),
+    ModelInfo(
+        name="qwen/qwen2.5-72b-instruct", provider="openai_compat",
+        context_window=128_000, max_output_tokens=4096,
+        description="NVIDIA NIM - Qwen 2.5 72B Instruct",
+        aliases=["nvidia-qwen72b", "nvidia/qwen2.5-72b"],
+        api_base="https://integrate.api.nvidia.com/v1",
+    ),
 ]
 
 
@@ -340,6 +391,17 @@ class ModelCatalog:
                 context_window=128_000,
                 max_output_tokens=16_384,
                 description=f"{name_or_alias.strip()} (OpenRouter Cloud)",
+            )
+
+        # Dynamic fallback for NVIDIA NIM models:
+        if key.startswith(("nvidia/", "meta/llama-", "mistralai/")) or "nemotron" in key:
+            return ModelInfo(
+                name=name_or_alias.strip(),
+                provider="openai_compat",
+                api_base="https://integrate.api.nvidia.com/v1",
+                context_window=131_072,
+                max_output_tokens=8192,
+                description=f"{name_or_alias.strip()} (NVIDIA NIM Cloud)",
             )
 
         return None

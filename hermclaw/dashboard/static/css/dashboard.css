@@ -2427,6 +2427,12 @@ body {
   border: 1px solid rgba(236, 72, 153, 0.3);
 }
 
+.provider-tag.nvidia {
+  background: rgba(118, 185, 0, 0.15);
+  color: #76b900;
+  border: 1px solid rgba(118, 185, 0, 0.35);
+}
+
 .provider-tag.ollama {
   background: rgba(139, 92, 246, 0.15);
   color: #c4b5fd;

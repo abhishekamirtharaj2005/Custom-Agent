@@ -114,6 +114,8 @@ def ask_yes_no(prompt: str, default: bool = False) -> bool:
 def ask_secret(prompt: str, env_var: str, description: str = "") -> Tuple[str, str]:
     """Ask for a secret (API key or bot token), returns (env_var_name, value)."""
     existing = os.environ.get(env_var, "")
+    if not existing and env_var == "NVIDIA_API_KEY":
+        existing = os.environ.get("NVAPI_KEY", "")
     if existing:
         masked = existing[:6] + "..." + existing[-4:] if len(existing) > 10 else "***"
         print(f"\n  {C.GREEN}✓{C.RESET} {env_var} already set: {C.DIM}{masked}{C.RESET}")
@@ -280,6 +282,29 @@ PROVIDERS: Dict[str, Dict[str, Any]] = {
         "default_model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
         "models": ["meta-llama/Llama-3.3-70B-Instruct-Turbo", "deepseek-ai/DeepSeek-R1"],
         "api_base_value": "https://api.together.xyz/v1",
+    },
+    "NVIDIA NIM (Llama 3.3 70B, Llama 3.1 405B, DeepSeek-R1, Nemotron, Mistral)": {
+        "provider": "openai_compat",
+        "api_key_env": "NVIDIA_API_KEY",
+        "api_base_env": "NVIDIA_API_BASE",
+        "context_window": 131072,
+        "needs_key": True,
+        "default_model": "meta/llama-3.3-70b-instruct",
+        "models": [
+            "meta/llama-3.3-70b-instruct",
+            "meta/llama-3.1-405b-instruct",
+            "meta/llama-3.1-70b-instruct",
+            "deepseek-ai/deepseek-r1",
+            "deepseek-ai/deepseek-v3",
+            "nvidia/llama-3.1-nemotron-70b-instruct",
+            "nvidia/nemotron-4-340b-instruct",
+            "mistralai/mistral-large-2-instruct",
+            "mistralai/mixtral-8x22b-instruct-v0.1",
+            "google/gemma-2-27b-it",
+            "microsoft/phi-4",
+            "qwen/qwen2.5-72b-instruct",
+        ],
+        "api_base_value": "https://integrate.api.nvidia.com/v1",
     },
     "Custom OpenAI-compatible endpoint (vLLM, LM Studio, llama.cpp)": {
         "provider": "openai_compat",

@@ -1538,6 +1538,23 @@ const ENGINE_PROVIDERS = {
     placeholder: 'sk-or-v1-...',
     envKey: 'OPENROUTER_API_KEY',
   },
+  nvidia: {
+    id: 'nvidia',
+    name: 'NVIDIA NIM',
+    defaultModel: 'meta/llama-3.3-70b-instruct',
+    context: '128k context',
+    models: [
+      'meta/llama-3.3-70b-instruct',
+      'meta/llama-3.1-405b-instruct',
+      'deepseek-ai/deepseek-r1',
+      'deepseek-ai/deepseek-v3',
+      'nvidia/llama-3.1-nemotron-70b-instruct',
+      'mistralai/mistral-large-2-instruct',
+      'qwen/qwen2.5-72b-instruct',
+    ],
+    placeholder: 'nvapi-...',
+    envKey: 'NVIDIA_API_KEY',
+  },
   ollama: {
     id: 'ollama',
     name: 'Ollama (Local)',
@@ -1944,6 +1961,7 @@ function populateModelDropdown(models, currentModel) {
     groq: 'Cloud Models (Groq)',
     deepseek: 'Cloud Models (DeepSeek)',
     openrouter: 'Cloud Models (OpenRouter)',
+    nvidia: 'Cloud Models (NVIDIA NIM)',
   };
 
   Object.keys(cloudByProvider).forEach(p => {

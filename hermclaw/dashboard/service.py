@@ -123,6 +123,22 @@ CLOUD_PROVIDERS: list[dict[str, Any]] = [
             {"id": "openrouter/auto", "name": "OpenRouter Auto-Routing", "context": "128k"},
         ],
     },
+    {
+        "id": "nvidia",
+        "name": "NVIDIA NIM",
+        "env_var": "NVIDIA_API_KEY",
+        "alt_env_var": "NVAPI_KEY",
+        "placeholder": "nvapi-...",
+        "models": [
+            {"id": "meta/llama-3.3-70b-instruct", "name": "Llama 3.3 70B Instruct", "context": "128k"},
+            {"id": "meta/llama-3.1-405b-instruct", "name": "Llama 3.1 405B Instruct (Flagship)", "context": "128k"},
+            {"id": "deepseek-ai/deepseek-r1", "name": "DeepSeek R1 (Reasoner)", "context": "64k"},
+            {"id": "deepseek-ai/deepseek-v3", "name": "DeepSeek V3", "context": "64k"},
+            {"id": "nvidia/llama-3.1-nemotron-70b-instruct", "name": "Nemotron 70B Instruct", "context": "128k"},
+            {"id": "mistralai/mistral-large-2-instruct", "name": "Mistral Large 2", "context": "128k"},
+            {"id": "qwen/qwen2.5-72b-instruct", "name": "Qwen 2.5 72B Instruct", "context": "128k"},
+        ],
+    },
 ]
 
 
@@ -360,6 +376,7 @@ class DashboardService:
             "groq": "GROQ_API_KEY",
             "deepseek": "DEEPSEEK_API_KEY",
             "openrouter": "OPENROUTER_API_KEY",
+            "nvidia": "NVIDIA_API_KEY",
         }
 
         # 1. Save API key if provided
@@ -406,6 +423,7 @@ class DashboardService:
             "groq": ["GROQ_API_KEY"],
             "deepseek": ["DEEPSEEK_API_KEY"],
             "openrouter": ["OPENROUTER_API_KEY"],
+            "nvidia": ["NVIDIA_API_KEY", "NVAPI_KEY"],
         }
         keys_to_clear = provider_env_map.get(provider.strip().lower(), [])
         if not keys_to_clear:
@@ -547,6 +565,8 @@ class DashboardService:
                 cprov = "groq"
             elif cprov == "openrouter":
                 cprov = "openrouter"
+            elif cprov == "nvidia" or cid_low.startswith(("nvidia/", "meta/llama-")) or "nemotron" in cid_low:
+                cprov = "nvidia"
 
             # Check if this cloud provider is actually configured with an API key
             if not status_map.get(cprov, False):
@@ -688,6 +708,8 @@ class DashboardService:
                 prov_norm = "deepseek"
             elif "llama-3.3-70b-versatile" in m_low or m_low.startswith("groq/"):
                 prov_norm = "groq"
+            elif prov_norm == "nvidia" or m_low.startswith(("nvidia/", "meta/llama-")) or "nemotron" in m_low:
+                prov_norm = "nvidia"
             else:
                 prov_norm = "ollama"
 
@@ -777,6 +799,15 @@ class DashboardService:
                 if not os.environ.get("OPENROUTER_API_KEY"):
                     raise ValueError("OpenRouter API key is not configured. Please save it in Doctor & Settings -> AI Engine Config.")
                 os.environ["OPENROUTER_API_BASE"] = info.api_base
+            elif "nvidia.com" in (info.api_base or "") or prov_norm == "nvidia":
+                api_base_env = "NVIDIA_API_BASE"
+                api_key_env = "NVIDIA_API_KEY"
+                nv_key = os.environ.get("NVIDIA_API_KEY") or os.environ.get("NVAPI_KEY")
+                if not nv_key:
+                    raise ValueError("NVIDIA API key is not configured. Please save it in Doctor & Settings -> AI Engine Config.")
+                if not os.environ.get("NVIDIA_API_KEY"):
+                    os.environ["NVIDIA_API_KEY"] = nv_key
+                os.environ["NVIDIA_API_BASE"] = info.api_base or "https://integrate.api.nvidia.com/v1"
             else:
                 api_base_env = f"HERMCLAW_API_BASE_{info.provider.upper()}"
                 api_key_env = "OPENAI_API_KEY"
